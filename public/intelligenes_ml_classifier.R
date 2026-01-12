@@ -8,8 +8,9 @@
 #
 # INPUT FILES:
 #   1. Expression matrix (tab-delimited .txt or .tsv)
-#      - Rows: samples, Columns: features
-#      - First column should be sample IDs
+#      - Rows: FEATURES, Columns: SAMPLES
+#      - Column names are sample IDs (no separate sample ID column needed)
+#      - First column can optionally be feature names (will be used as row names)
 #   2. Sample annotation file (tab-delimited .txt or .tsv)
 #      - Must contain sample IDs and target variable column
 #
@@ -38,12 +39,12 @@ suppressPackageStartupMessages({
 
 config <- list(
   # Input files (tab-delimited: .txt or .tsv)
+  # Expression matrix: rows = features, columns = samples (column names are sample IDs)
   expression_matrix_file = "expression_matrix.txt",  # or .tsv
   annotation_file = "sample_annotation.txt",         # or .tsv
   
-  # Column names
-  sample_id_column = "sample_id",      # Column name for sample IDs in both files
-  target_variable = "diagnosis",        # Column name for target variable in annotation
+  # Column name for target variable in annotation file
+  target_variable = "diagnosis",
   
   # Model settings
   seed = 42,
@@ -103,12 +104,11 @@ read_tabular <- function(file_path) {
   ext <- tolower(tools::file_ext(file_path))
   
   if (ext %in% c("txt", "tsv")) {
-    data <- read.delim(file_path, stringsAsFactors = FALSE, sep = "\t")
+    data <- read.delim(file_path, stringsAsFactors = FALSE, sep = "\t", row.names = 1, check.names = FALSE)
   } else if (ext == "csv") {
-    data <- read.csv(file_path, stringsAsFactors = FALSE)
+    data <- read.csv(file_path, stringsAsFactors = FALSE, row.names = 1, check.names = FALSE)
   } else {
-    # Try tab-delimited by default
-    data <- read.delim(file_path, stringsAsFactors = FALSE, sep = "\t")
+    data <- read.delim(file_path, stringsAsFactors = FALSE, sep = "\t", row.names = 1, check.names = FALSE)
   }
   
   return(data)
@@ -159,24 +159,23 @@ normalize_importance <- function(importance) {
 load_data <- function(config) {
   log_message("Loading expression matrix and sample annotations...")
   
-  # Load expression matrix
+  # Load expression matrix (rows = features, columns = samples)
   log_message(sprintf("Reading expression matrix: %s", config$expression_matrix_file))
   expr_matrix <- read_tabular(config$expression_matrix_file)
   
-  # Load annotation file
+  # Transpose: now rows = samples, columns = features
+  expr_matrix <- as.data.frame(t(expr_matrix))
+  sample_ids <- rownames(expr_matrix)
+  
+  log_message(sprintf("Expression matrix: %d samples x %d features", nrow(expr_matrix), ncol(expr_matrix)))
+  
+  # Load annotation file  
   log_message(sprintf("Reading annotation file: %s", config$annotation_file))
-  annotation <- read_tabular(config$annotation_file)
+  annotation <- read.delim(config$annotation_file, stringsAsFactors = FALSE, sep = "\t")
   
-  # Check for sample ID column
-  if (!config$sample_id_column %in% colnames(expr_matrix)) {
-    stop(sprintf("Sample ID column '%s' not found in expression matrix. Available: %s",
-                 config$sample_id_column, paste(colnames(expr_matrix)[1:5], collapse = ", ")))
-  }
-  
-  if (!config$sample_id_column %in% colnames(annotation)) {
-    stop(sprintf("Sample ID column '%s' not found in annotation file. Available: %s",
-                 config$sample_id_column, paste(colnames(annotation), collapse = ", ")))
-  }
+  # Find sample ID column in annotation (first column or look for common pattern)
+  annot_sample_col <- colnames(annotation)[1]
+  annot_samples <- annotation[[annot_sample_col]]
   
   # Check for target variable
   if (!config$target_variable %in% colnames(annotation)) {
@@ -184,32 +183,24 @@ load_data <- function(config) {
                  config$target_variable, paste(colnames(annotation), collapse = ", ")))
   }
   
-  # Get sample IDs
-  expr_samples <- expr_matrix[[config$sample_id_column]]
-  annot_samples <- annotation[[config$sample_id_column]]
-  
   # Find common samples
-  common_samples <- intersect(expr_samples, annot_samples)
-  log_message(sprintf("Found %d common samples between expression matrix and annotation",
-                      length(common_samples)))
+  common_samples <- intersect(sample_ids, annot_samples)
+  log_message(sprintf("Found %d common samples between expression matrix and annotation", length(common_samples)))
   
   if (length(common_samples) == 0) {
-    stop("No common samples found between expression matrix and annotation file")
+    stop("No common samples found. Ensure column names in expression matrix match sample IDs in annotation.")
   }
   
   # Filter and align data
-  expr_matrix <- expr_matrix[expr_matrix[[config$sample_id_column]] %in% common_samples, ]
-  annotation <- annotation[annotation[[config$sample_id_column]] %in% common_samples, ]
+  expr_matrix <- expr_matrix[rownames(expr_matrix) %in% common_samples, , drop = FALSE]
+  annotation <- annotation[annotation[[annot_sample_col]] %in% common_samples, ]
   
-  # Sort by sample ID to ensure alignment
-  expr_matrix <- expr_matrix[order(expr_matrix[[config$sample_id_column]]), ]
-  annotation <- annotation[order(annotation[[config$sample_id_column]]), ]
+  # Sort to ensure alignment
+  expr_matrix <- expr_matrix[order(rownames(expr_matrix)), , drop = FALSE]
+  annotation <- annotation[order(annotation[[annot_sample_col]]), ]
   
-  # Extract sample IDs and features
-  sample_ids <- expr_matrix[[config$sample_id_column]]
-  X <- expr_matrix[, colnames(expr_matrix) != config$sample_id_column]
-  
-  # Extract target variable
+  sample_ids <- rownames(expr_matrix)
+  X <- expr_matrix
   y <- as.factor(annotation[[config$target_variable]])
   
   # Ensure X is numeric
@@ -228,9 +219,7 @@ load_data <- function(config) {
   if (any(is.na(X))) {
     log_message("Imputing missing values with median", "WARN")
     X <- as.data.frame(lapply(X, function(x) {
-      if (is.numeric(x)) {
-        x[is.na(x)] <- median(x, na.rm = TRUE)
-      }
+      if (is.numeric(x)) x[is.na(x)] <- median(x, na.rm = TRUE)
       return(x)
     }))
   }

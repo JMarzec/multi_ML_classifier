@@ -9,7 +9,8 @@ import {
   Settings, 
   ArrowLeft,
   Grid3X3,
-  TrendingUp
+  TrendingUp,
+  Database
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -21,6 +22,7 @@ import { ConfusionMatrixChart } from "./ConfusionMatrixChart";
 import { ROCCurveChart } from "./ROCCurveChart";
 import { ReportExport } from "./ReportExport";
 import { ThemeToggle } from "./ThemeToggle";
+import { DataPreprocessingTab } from "./DataPreprocessingTab";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -142,8 +144,12 @@ export function Dashboard({ data, onReset }: DashboardProps) {
         />
 
         {/* Main Tabs */}
-        <Tabs defaultValue="performance" className="space-y-6">
+        <Tabs defaultValue="data" className="space-y-6">
           <TabsList className="bg-muted/50 p-1 flex-wrap h-auto">
+            <TabsTrigger value="data" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Database className="w-4 h-4 mr-2" />
+              Data
+            </TabsTrigger>
             <TabsTrigger value="performance" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <BarChart3 className="w-4 h-4 mr-2" />
               Performance
@@ -173,6 +179,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               Config
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="data">
+            <DataPreprocessingTab data={data} />
+          </TabsContent>
 
           <TabsContent value="performance" className="space-y-6">
             <div className="flex gap-2 mb-4 flex-wrap">

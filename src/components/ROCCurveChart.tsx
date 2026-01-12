@@ -11,6 +11,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import { ThresholdSlider } from "./ThresholdSlider";
 import type { ModelPerformance, ROCPoint } from "@/types/ml-results";
 
 interface ROCCurveChartProps {
@@ -41,6 +42,7 @@ export function ROCCurveChart({ performance }: ROCCurveChartProps) {
   const [visibleModels, setVisibleModels] = useState<Set<string>>(
     new Set(Object.keys(performance).filter((k) => performance[k as keyof ModelPerformance]?.roc_curve))
   );
+  const [thresholds, setThresholds] = useState<Record<string, number>>({});
 
   // Get models with ROC data
   const modelsWithROC = useMemo(() => {
@@ -224,6 +226,34 @@ export function ROCCurveChart({ performance }: ROCCurveChartProps) {
               <p className="font-mono font-bold text-lg">{auc}%</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Threshold Sliders */}
+      <div className="bg-card rounded-xl p-5 border border-border">
+        <h4 className="font-semibold mb-4">Interactive Threshold Analysis</h4>
+        <p className="text-sm text-muted-foreground mb-4">
+          Adjust the decision threshold for each model to see how sensitivity and specificity trade off at different cutoff points.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {modelsWithROC
+            .filter((model) => visibleModels.has(model))
+            .map((model) => {
+              const modelKey = model as keyof ModelPerformance;
+              const rocCurve = performance[modelKey]?.roc_curve;
+              if (!rocCurve) return null;
+              
+              return (
+                <ThresholdSlider
+                  key={model}
+                  threshold={thresholds[model] ?? 0.5}
+                  onThresholdChange={(value) => setThresholds((prev) => ({ ...prev, [model]: value }))}
+                  rocCurve={rocCurve}
+                  modelName={MODEL_LABELS[model]}
+                  color={MODEL_COLORS[model]}
+                />
+              );
+            })}
         </div>
       </div>
     </div>
