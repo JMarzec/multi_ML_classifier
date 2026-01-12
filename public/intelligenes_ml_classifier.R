@@ -165,8 +165,68 @@ read_tabular <- function(file_path) {
   return(data)
 }
 
+#' Safe calculation of metrics with handling for single-class predictions
+#' @param actual Actual class labels
+#' @param predicted Predicted class labels
+#' @param probabilities Optional probability vector for AUROC calculation
+#' @return List of metrics
 calculate_metrics <- function(actual, predicted, probabilities = NULL) {
-  cm <- confusionMatrix(as.factor(predicted), as.factor(actual), positive = "1")
+  # Ensure both vectors have the same factor levels
+  all_levels <- union(levels(as.factor(actual)), levels(as.factor(predicted)))
+  if (length(all_levels) < 2) {
+    all_levels <- c("0", "1")
+  }
+  
+  actual_factor <- factor(actual, levels = all_levels)
+  predicted_factor <- factor(predicted, levels = all_levels)
+  
+  # Check if we have at least 2 levels with data
+  actual_unique <- unique(as.character(actual))
+  predicted_unique <- unique(as.character(predicted))
+  
+  # If predictions have only one class, return NA metrics
+  if (length(predicted_unique) < 2 || length(actual_unique) < 2) {
+    log_message("Warning: Single class in predictions or actual values, returning NA metrics", "WARN")
+    metrics <- list(
+      accuracy = NA_real_,
+      sensitivity = NA_real_,
+      specificity = NA_real_,
+      precision = NA_real_,
+      f1_score = NA_real_,
+      balanced_accuracy = NA_real_,
+      kappa = NA_real_,
+      confusion_matrix = list(tp = 0, tn = 0, fp = 0, fn = 0)
+    )
+    
+    if (!is.null(probabilities)) {
+      metrics$auroc <- NA_real_
+      metrics$roc_curve <- data.frame(fpr = c(0, 1), tpr = c(0, 1))
+    }
+    
+    return(metrics)
+  }
+  
+  cm <- tryCatch({
+    confusionMatrix(predicted_factor, actual_factor, positive = "1")
+  }, error = function(e) {
+    log_message(sprintf("confusionMatrix error: %s", e$message), "WARN")
+    return(NULL)
+  })
+  
+  if (is.null(cm)) {
+    return(list(
+      accuracy = NA_real_,
+      sensitivity = NA_real_,
+      specificity = NA_real_,
+      precision = NA_real_,
+      f1_score = NA_real_,
+      balanced_accuracy = NA_real_,
+      kappa = NA_real_,
+      confusion_matrix = list(tp = 0, tn = 0, fp = 0, fn = 0),
+      auroc = NA_real_,
+      roc_curve = data.frame(fpr = c(0, 1), tpr = c(0, 1))
+    ))
+  }
   
   metrics <- list(
     accuracy = as.numeric(cm$overall["Accuracy"]),
@@ -185,12 +245,20 @@ calculate_metrics <- function(actual, predicted, probabilities = NULL) {
   )
   
   if (!is.null(probabilities)) {
-    roc_obj <- roc(actual, probabilities, quiet = TRUE)
-    metrics$auroc <- as.numeric(auc(roc_obj))
-    metrics$roc_curve <- data.frame(
-      fpr = 1 - roc_obj$specificities,
-      tpr = roc_obj$sensitivities
-    )
+    roc_obj <- tryCatch({
+      roc(actual, probabilities, quiet = TRUE)
+    }, error = function(e) NULL)
+    
+    if (!is.null(roc_obj)) {
+      metrics$auroc <- as.numeric(auc(roc_obj))
+      metrics$roc_curve <- data.frame(
+        fpr = 1 - roc_obj$specificities,
+        tpr = roc_obj$sensitivities
+      )
+    } else {
+      metrics$auroc <- NA_real_
+      metrics$roc_curve <- data.frame(fpr = c(0, 1), tpr = c(0, 1))
+    }
   }
   
   return(metrics)
