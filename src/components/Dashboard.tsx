@@ -14,7 +14,10 @@ import {
   Beaker,
   LineChart,
   Code,
-  Layers
+  Layers,
+  Target,
+  Grip,
+  GitBranch
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -31,6 +34,9 @@ import { SamplePredictionTab } from "./SamplePredictionTab";
 import { LearningCurveTab } from "./LearningCurveTab";
 import { ModelExportTab } from "./ModelExportTab";
 import { BatchResultsTab } from "./BatchResultsTab";
+import { CalibrationCurveTab } from "./CalibrationCurveTab";
+import { ClusteringVisualizationTab } from "./ClusteringVisualizationTab";
+import { CVFoldVisualizationTab } from "./CVFoldVisualizationTab";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -198,6 +204,18 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               <Layers className="w-4 h-4 mr-2" />
               Batch
             </TabsTrigger>
+            <TabsTrigger value="calibration" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Target className="w-4 h-4 mr-2" />
+              Calibration
+            </TabsTrigger>
+            <TabsTrigger value="clustering" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Grip className="w-4 h-4 mr-2" />
+              Clustering
+            </TabsTrigger>
+            <TabsTrigger value="cv-folds" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <GitBranch className="w-4 h-4 mr-2" />
+              CV Folds
+            </TabsTrigger>
             <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="w-4 h-4 mr-2" />
               Config
@@ -343,6 +361,18 @@ export function Dashboard({ data, onReset }: DashboardProps) {
 
           <TabsContent value="batch">
             <BatchResultsTab />
+          </TabsContent>
+
+          <TabsContent value="calibration">
+            <CalibrationCurveTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="clustering">
+            <ClusteringVisualizationTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="cv-folds">
+            <CVFoldVisualizationTab data={data} />
           </TabsContent>
 
           <TabsContent value="config">
