@@ -46,6 +46,9 @@ config <- list(
   # Column name for target variable in annotation file
   target_variable = "diagnosis",
   
+  # Analysis mode: "full" (default) or "fast" (for testing, reduced accuracy)
+  analysis_mode = "full",  # "full" or "fast"
+  
   # Model settings
   seed = 42,
   n_folds = 5,
@@ -81,10 +84,35 @@ config <- list(
   mlp_decay = 0.01,
   mlp_maxit = 200,
   
+  # Batch processing (optional)
+  # Set to NULL for single dataset, or list of dataset configs for batch mode
+  batch_datasets = NULL,  # Example: list(list(expr="data1.txt", annot="annot1.txt", name="Dataset1"), ...)
+  
   # Output
   output_dir = "./results",
   output_json = "ml_results.json"
 )
+
+# =============================================================================
+# FAST MODE CONFIGURATION
+# =============================================================================
+# When analysis_mode = "fast", these settings override defaults for quick testing
+# This reduces accuracy but provides rapid feedback for testing pipelines
+
+get_effective_config <- function(config) {
+  if (config$analysis_mode == "fast") {
+    log_message("FAST MODE ENABLED - Using reduced settings for quick testing", "WARN")
+    config$n_folds <- 2
+    config$n_repeats <- 1
+    config$n_permutations <- 10
+    config$rf_ntree <- 50
+    config$xgb_nrounds <- 20
+    config$mlp_maxit <- 50
+    config$max_features <- min(config$max_features, 10)
+    config$feature_selection_method <- "none"  # Skip feature selection in fast mode
+  }
+  return(config)
+}
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -801,9 +829,16 @@ export_to_json <- function(results, config, output_path) {
 # =============================================================================
 
 run_pipeline <- function(config) {
+  # Apply fast mode settings if enabled
+
+  config <- get_effective_config(config)
+  
   start_time <- Sys.time()
   log_message(paste(rep("=", 60), collapse = ""))
   log_message("Starting IntelliGenes-Style ML Classification Pipeline")
+  if (config$analysis_mode == "fast") {
+    log_message(">>> FAST ANALYSIS MODE (Testing Only) <<<", "WARN")
+  }
   log_message(paste(rep("=", 60), collapse = ""))
   
   if (!dir.exists(config$output_dir)) dir.create(config$output_dir, recursive = TRUE)
@@ -866,7 +901,8 @@ run_pipeline <- function(config) {
     permutation = permutation_results,
     original_metrics = original_metrics,
     ranking = ranking,
-    selected_features = selected_features
+    selected_features = selected_features,
+    dataset_name = basename(config$expression_matrix_file)
   )
   
   output_path <- file.path(config$output_dir, config$output_json)
@@ -880,9 +916,113 @@ run_pipeline <- function(config) {
 }
 
 # =============================================================================
+# BATCH PROCESSING
+# =============================================================================
+
+#' Run batch analysis on multiple datasets
+#' @param batch_config List containing batch_datasets configuration
+#' @return Combined results from all datasets
+run_batch_pipeline <- function(batch_config) {
+  if (is.null(batch_config$batch_datasets) || length(batch_config$batch_datasets) == 0) {
+    stop("No batch datasets specified. Set config$batch_datasets to a list of dataset configurations.")
+  }
+  
+  log_message(paste(rep("=", 60), collapse = ""))
+  log_message(sprintf("BATCH PROCESSING: %d datasets", length(batch_config$batch_datasets)))
+  log_message(paste(rep("=", 60), collapse = ""))
+  
+  batch_start <- Sys.time()
+  all_results <- list()
+  
+  for (i in seq_along(batch_config$batch_datasets)) {
+    dataset <- batch_config$batch_datasets[[i]]
+    dataset_name <- dataset$name %||% paste0("Dataset_", i)
+    
+    log_message(paste(rep("-", 40), collapse = ""))
+    log_message(sprintf("Processing dataset %d/%d: %s", i, length(batch_config$batch_datasets), dataset_name))
+    log_message(paste(rep("-", 40), collapse = ""))
+    
+    # Create dataset-specific config
+    dataset_config <- batch_config
+    dataset_config$expression_matrix_file <- dataset$expr
+    dataset_config$annotation_file <- dataset$annot
+    dataset_config$output_json <- paste0(dataset_name, "_results.json")
+    dataset_config$batch_datasets <- NULL  # Prevent recursion
+    
+    # Run pipeline for this dataset
+    tryCatch({
+      result <- run_pipeline(dataset_config)
+      result$dataset_name <- dataset_name
+      all_results[[dataset_name]] <- result
+      log_message(sprintf("Dataset '%s' completed successfully", dataset_name))
+    }, error = function(e) {
+      log_message(sprintf("Dataset '%s' failed: %s", dataset_name, e$message), "ERROR")
+      all_results[[dataset_name]] <- list(error = e$message, dataset_name = dataset_name)
+    })
+  }
+  
+  # Export combined batch results
+  batch_output <- list(
+    metadata = list(
+      generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S"),
+      batch_mode = TRUE,
+      n_datasets = length(batch_config$batch_datasets),
+      r_version = R.version.string
+    ),
+    datasets = all_results,
+    summary = create_batch_summary(all_results)
+  )
+  
+  batch_output_path <- file.path(batch_config$output_dir, "batch_results.json")
+  json_output <- toJSON(batch_output, auto_unbox = TRUE, pretty = TRUE, digits = 6)
+  writeLines(json_output, batch_output_path)
+  
+  batch_end <- Sys.time()
+  log_message(paste(rep("=", 60), collapse = ""))
+  log_message(sprintf("Batch processing completed in %.2f minutes", 
+                      as.numeric(difftime(batch_end, batch_start, units = "mins"))))
+  log_message(sprintf("Combined results exported to: %s", batch_output_path))
+  
+  return(invisible(batch_output))
+}
+
+#' Create summary of batch results for comparison
+create_batch_summary <- function(all_results) {
+  summary_df <- lapply(names(all_results), function(name) {
+    result <- all_results[[name]]
+    if (!is.null(result$error)) {
+      return(data.frame(
+        dataset = name,
+        status = "failed",
+        rf_auroc = NA,
+        soft_vote_auroc = NA,
+        n_features = NA
+      ))
+    }
+    
+    data.frame(
+      dataset = name,
+      status = "success",
+      rf_auroc = if (!is.null(result$summary$rf$auroc)) result$summary$rf$auroc$mean else NA,
+      soft_vote_auroc = if (!is.null(result$summary$soft_vote$auroc)) result$summary$soft_vote$auroc$mean else NA,
+      n_features = length(result$selected_features)
+    )
+  })
+  
+  do.call(rbind, summary_df)
+}
+
+# Null-coalescing operator
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+# =============================================================================
 # RUN
 # =============================================================================
 
 if (!interactive()) {
-  run_pipeline(config)
+  if (!is.null(config$batch_datasets) && length(config$batch_datasets) > 0) {
+    run_batch_pipeline(config)
+  } else {
+    run_pipeline(config)
+  }
 }

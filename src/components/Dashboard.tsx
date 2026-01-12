@@ -10,7 +10,8 @@ import {
   ArrowLeft,
   Grid3X3,
   TrendingUp,
-  Database
+  Database,
+  Beaker
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -23,6 +24,7 @@ import { ROCCurveChart } from "./ROCCurveChart";
 import { ReportExport } from "./ReportExport";
 import { ThemeToggle } from "./ThemeToggle";
 import { DataPreprocessingTab } from "./DataPreprocessingTab";
+import { SamplePredictionTab } from "./SamplePredictionTab";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -174,6 +176,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               <Users className="w-4 h-4 mr-2" />
               Rankings
             </TabsTrigger>
+            <TabsTrigger value="prediction" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Beaker className="w-4 h-4 mr-2" />
+              Predict
+            </TabsTrigger>
             <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="w-4 h-4 mr-2" />
               Config
@@ -303,6 +309,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
                 <p className="text-muted-foreground">No profile ranking data available</p>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="prediction">
+            <SamplePredictionTab data={data} />
           </TabsContent>
 
           <TabsContent value="config">
