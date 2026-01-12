@@ -478,16 +478,40 @@ train_mlp <- function(X_train, y_train, config) {
 }
 
 # Prediction functions
+#' Safe extraction of class probability
+#' Handles cases where probability matrix may not have expected class columns
+#' @param prob_matrix Probability matrix from model prediction
+#' @param target_class Target class column name (default "1")
+#' @return Vector of probabilities
+safe_get_prob <- function(prob_matrix, target_class = "1") {
+  if (is.null(prob_matrix)) return(rep(0.5, nrow(prob_matrix)))
+  
+  if (is.vector(prob_matrix)) return(prob_matrix)
+  
+  if (target_class %in% colnames(prob_matrix)) {
+    return(prob_matrix[, target_class])
+  } else if (ncol(prob_matrix) >= 2) {
+    # Assume second column is positive class
+    return(prob_matrix[, 2])
+  } else if (ncol(prob_matrix) == 1) {
+    return(prob_matrix[, 1])
+  } else {
+    return(rep(0.5, nrow(prob_matrix)))
+  }
+}
+
 predict_rf <- function(model_obj, X_test) {
   pred <- predict(model_obj$model, X_test)
-  prob <- predict(model_obj$model, X_test, type = "prob")[, "1"]
+  prob_matrix <- predict(model_obj$model, X_test, type = "prob")
+  prob <- safe_get_prob(prob_matrix, "1")
   return(list(predictions = pred, probabilities = prob))
 }
 
 predict_svm <- function(model_obj, X_test) {
   pred <- predict(model_obj$model, as.matrix(X_test))
   prob_attr <- predict(model_obj$model, as.matrix(X_test), probability = TRUE)
-  prob <- attr(prob_attr, "probabilities")[, "1"]
+  prob_matrix <- attr(prob_attr, "probabilities")
+  prob <- safe_get_prob(prob_matrix, "1")
   return(list(predictions = pred, probabilities = prob))
 }
 
@@ -507,7 +531,7 @@ predict_knn <- function(model_obj, X_test) {
 
 predict_mlp <- function(model_obj, X_test) {
   prob_matrix <- predict(model_obj$model, as.matrix(X_test))
-  prob <- prob_matrix[, 2]
+  prob <- safe_get_prob(prob_matrix)
   pred <- factor(ifelse(prob > 0.5, "1", "0"), levels = c("0", "1"))
   return(list(predictions = pred, probabilities = prob))
 }
@@ -666,7 +690,8 @@ run_permutation_test <- function(X, y, config, selected_features = NULL) {
       }, error = function(e) NULL)
       
       if (!is.null(rf_fold)) {
-        cv_probs[fold] <- predict(rf_fold, X[fold, ], type = "prob")[, "1"]
+        prob_matrix <- predict(rf_fold, X[fold, ], type = "prob")
+        cv_probs[fold] <- safe_get_prob(prob_matrix, "1")
       }
     }
     
@@ -687,13 +712,20 @@ rank_profiles <- function(X, y, models, config) {
   log_message("Ranking profiles by prediction confidence...")
   
   all_probs <- list()
-  if (!is.null(models$rf)) all_probs$rf <- predict(models$rf$model, X, type = "prob")[, "1"]
+  if (!is.null(models$rf)) {
+    prob_matrix <- predict(models$rf$model, X, type = "prob")
+    all_probs$rf <- safe_get_prob(prob_matrix, "1")
+  }
   if (!is.null(models$svm)) {
     svm_pred <- predict(models$svm$model, as.matrix(X), probability = TRUE)
-    all_probs$svm <- attr(svm_pred, "probabilities")[, "1"]
+    prob_matrix <- attr(svm_pred, "probabilities")
+    all_probs$svm <- safe_get_prob(prob_matrix, "1")
   }
   if (!is.null(models$xgboost)) all_probs$xgboost <- predict(models$xgboost$model, as.matrix(X))
-  if (!is.null(models$mlp)) all_probs$mlp <- predict(models$mlp$model, as.matrix(X))[, 2]
+  if (!is.null(models$mlp)) {
+    prob_matrix <- predict(models$mlp$model, as.matrix(X))
+    all_probs$mlp <- safe_get_prob(prob_matrix)
+  }
   
   avg_prob <- rowMeans(do.call(cbind, all_probs), na.rm = TRUE)
   confidence <- abs(avg_prob - 0.5) * 2

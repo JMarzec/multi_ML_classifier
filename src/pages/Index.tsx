@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ComparisonUploader } from "@/components/ComparisonUploader";
 import { ComparisonDashboard } from "@/components/ComparisonDashboard";
+import { DemoDataDownload } from "@/components/DemoDataDownload";
 import { Brain, Download, Github, FileCode2, Sparkles, Play, GitCompare } from "lucide-react";
 import type { MLResults } from "@/types/ml-results";
 import { demoData } from "@/data/demoData";
@@ -117,6 +118,9 @@ const Index = () => {
               <p className="text-muted-foreground">Upload the JSON output from the R script to visualize your results</p>
             </div>
             <FileUploader onDataLoaded={(d) => { setData(d); setViewMode("single"); }} />
+            <div className="mt-6">
+              <DemoDataDownload />
+            </div>
           </div>
         )}
 

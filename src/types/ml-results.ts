@@ -85,6 +85,9 @@ export interface MLResultsConfig {
   xgb_nrounds: number;
   expression_matrix_file?: string;
   annotation_file?: string;
+  svm_kernel?: string;
+  knn_k?: number;
+  analysis_mode?: string;
 }
 
 export interface MLResultsMetadata {

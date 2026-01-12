@@ -11,7 +11,10 @@ import {
   Grid3X3,
   TrendingUp,
   Database,
-  Beaker
+  Beaker,
+  LineChart,
+  Code,
+  Layers
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -25,6 +28,9 @@ import { ReportExport } from "./ReportExport";
 import { ThemeToggle } from "./ThemeToggle";
 import { DataPreprocessingTab } from "./DataPreprocessingTab";
 import { SamplePredictionTab } from "./SamplePredictionTab";
+import { LearningCurveTab } from "./LearningCurveTab";
+import { ModelExportTab } from "./ModelExportTab";
+import { BatchResultsTab } from "./BatchResultsTab";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -180,6 +186,18 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               <Beaker className="w-4 h-4 mr-2" />
               Predict
             </TabsTrigger>
+            <TabsTrigger value="learning" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <LineChart className="w-4 h-4 mr-2" />
+              Learning
+            </TabsTrigger>
+            <TabsTrigger value="export" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Code className="w-4 h-4 mr-2" />
+              Export
+            </TabsTrigger>
+            <TabsTrigger value="batch" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Layers className="w-4 h-4 mr-2" />
+              Batch
+            </TabsTrigger>
             <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="w-4 h-4 mr-2" />
               Config
@@ -313,6 +331,18 @@ export function Dashboard({ data, onReset }: DashboardProps) {
 
           <TabsContent value="prediction">
             <SamplePredictionTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="learning">
+            <LearningCurveTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="export">
+            <ModelExportTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="batch">
+            <BatchResultsTab />
           </TabsContent>
 
           <TabsContent value="config">
