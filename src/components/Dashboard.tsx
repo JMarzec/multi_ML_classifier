@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { 
@@ -17,7 +17,10 @@ import {
   Layers,
   Target,
   Grip,
-  GitBranch
+  GitBranch,
+  Info,
+  BoxSelect,
+  Activity
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -38,6 +41,9 @@ import { BatchResultsTab } from "./BatchResultsTab";
 import { CalibrationCurveTab } from "./CalibrationCurveTab";
 import { ClusteringVisualizationTab } from "./ClusteringVisualizationTab";
 import { CVFoldVisualizationTab } from "./CVFoldVisualizationTab";
+import { FeatureExpressionBoxplotTab } from "./FeatureExpressionBoxplotTab";
+import { PermutationDistributionTab } from "./PermutationDistributionTab";
+import { MLMethodInfoPanel } from "./MLMethodInfoPanel";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -48,8 +54,31 @@ interface DashboardProps {
 export function Dashboard({ data, onReset }: DashboardProps) {
   const [metricFilter, setMetricFilter] = useState<"accuracy" | "auroc" | "f1_score" | "balanced_accuracy">("auroc");
   
+  // Compute effective ensemble accuracy using soft-vote fallback logic
+  // If hard_vote accuracy is 0 or NaN but soft_vote is valid, prefer soft_vote
+  const effectiveEnsembleStats = useMemo(() => {
+    const softVote = data.model_performance.soft_vote;
+    const hardVote = data.model_performance.hard_vote;
+    
+    // Check if soft_vote accuracy is valid
+    const softAcc = softVote?.accuracy?.mean;
+    const hardAcc = hardVote?.accuracy?.mean;
+    
+    // Prefer soft_vote if hard_vote is missing/zero
+    if (softAcc && softAcc > 0) {
+      return { stats: softVote.accuracy!, label: "Ensemble Accuracy (Soft)" };
+    }
+    if (hardAcc && hardAcc > 0) {
+      return { stats: hardVote!.accuracy!, label: "Ensemble Accuracy (Hard)" };
+    }
+    // Fallback to soft_vote even if 0 (display placeholder)
+    return softVote?.accuracy 
+      ? { stats: softVote.accuracy, label: "Ensemble Accuracy" }
+      : null;
+  }, [data.model_performance]);
+  
   const bestModel = Object.entries(data.model_performance)
-    .filter(([, metrics]) => metrics?.auroc)
+    .filter(([, metrics]) => metrics?.auroc && metrics.auroc.mean > 0)
     .sort((a, b) => (b[1]!.auroc!.mean || 0) - (a[1]!.auroc!.mean || 0))[0];
 
   const modelLabels: Record<string, string> = {
@@ -105,10 +134,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
             colorClass="text-accent"
           />
           
-          {data.model_performance.soft_vote?.accuracy && (
+          {effectiveEnsembleStats && (
             <MetricCard
-              title="Ensemble Accuracy"
-              stats={data.model_performance.soft_vote.accuracy}
+              title={effectiveEnsembleStats.label}
+              stats={effectiveEnsembleStats.stats}
               icon={<BarChart3 className="w-5 h-5" />}
               colorClass="text-primary"
             />
@@ -158,66 +187,78 @@ export function Dashboard({ data, onReset }: DashboardProps) {
           selectedFeatures={data.selected_features || []} 
         />
 
-        {/* Main Tabs */}
+        {/* Main Tabs - Enhanced visibility */}
         <Tabs defaultValue="data" className="space-y-6">
-          <TabsList className="bg-muted/50 p-1 flex-wrap h-auto">
-            <TabsTrigger value="data" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsList className="bg-muted/70 p-1.5 flex-wrap h-auto gap-1 border border-border rounded-xl shadow-sm">
+            <TabsTrigger value="data" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Database className="w-4 h-4 mr-2" />
               Data
             </TabsTrigger>
-            <TabsTrigger value="performance" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="performance" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <BarChart3 className="w-4 h-4 mr-2" />
               Performance
             </TabsTrigger>
-            <TabsTrigger value="confusion" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="confusion" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Grid3X3 className="w-4 h-4 mr-2" />
-              Confusion Matrix
+              Confusion
             </TabsTrigger>
-            <TabsTrigger value="roc" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="roc" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <TrendingUp className="w-4 h-4 mr-2" />
-              ROC Curves
+              ROC
             </TabsTrigger>
-            <TabsTrigger value="features" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="features" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Brain className="w-4 h-4 mr-2" />
               Features
             </TabsTrigger>
-            <TabsTrigger value="permutation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="boxplots" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
+              <BoxSelect className="w-4 h-4 mr-2" />
+              Expression
+            </TabsTrigger>
+            <TabsTrigger value="permutation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Shuffle className="w-4 h-4 mr-2" />
               Permutation
             </TabsTrigger>
-            <TabsTrigger value="rankings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="perm-dist" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
+              <Activity className="w-4 h-4 mr-2" />
+              Distributions
+            </TabsTrigger>
+            <TabsTrigger value="rankings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Users className="w-4 h-4 mr-2" />
               Rankings
             </TabsTrigger>
-            <TabsTrigger value="prediction" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="prediction" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Beaker className="w-4 h-4 mr-2" />
               Predict
             </TabsTrigger>
-            <TabsTrigger value="learning" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="learning" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <LineChart className="w-4 h-4 mr-2" />
               Learning
             </TabsTrigger>
-            <TabsTrigger value="export" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="export" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Code className="w-4 h-4 mr-2" />
               Export
             </TabsTrigger>
-            <TabsTrigger value="batch" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="batch" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Layers className="w-4 h-4 mr-2" />
               Batch
             </TabsTrigger>
-            <TabsTrigger value="calibration" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="calibration" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Target className="w-4 h-4 mr-2" />
               Calibration
             </TabsTrigger>
-            <TabsTrigger value="clustering" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="clustering" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Grip className="w-4 h-4 mr-2" />
               Clustering
             </TabsTrigger>
-            <TabsTrigger value="cv-folds" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="cv-folds" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <GitBranch className="w-4 h-4 mr-2" />
               CV Folds
             </TabsTrigger>
-            <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="ml-info" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
+              <Info className="w-4 h-4 mr-2" />
+              ML Guide
+            </TabsTrigger>
+            <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Settings className="w-4 h-4 mr-2" />
               Config
             </TabsTrigger>
@@ -325,6 +366,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
             <FeatureImportanceStabilityTab data={data} />
           </TabsContent>
 
+          <TabsContent value="boxplots">
+            <FeatureExpressionBoxplotTab data={data} />
+          </TabsContent>
+
           <TabsContent value="permutation">
             {data.permutation_testing ? (
               <PermutationTestingPanel permutation={data.permutation_testing} />
@@ -348,6 +393,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
                 <p className="text-muted-foreground">No profile ranking data available</p>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="perm-dist">
+            <PermutationDistributionTab data={data} />
           </TabsContent>
 
           <TabsContent value="prediction">
@@ -376,6 +425,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
 
           <TabsContent value="cv-folds">
             <CVFoldVisualizationTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="ml-info">
+            <MLMethodInfoPanel />
           </TabsContent>
 
           <TabsContent value="config">

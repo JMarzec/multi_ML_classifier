@@ -25,8 +25,18 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
   const [method, setMethod] = useState<MethodType>("pca");
   const [colorBy, setColorBy] = useState<"actual" | "predicted" | "correct">("actual");
 
+  // Check for exported data from R script
   const exportedPca = data.clustering?.pca?.points;
+  const exportedTsne = data.clustering?.tsne?.points;
+  const exportedUmap = data.clustering?.umap?.points;
   const exportedVariance = data.clustering?.pca?.variance_explained;
+
+  // Determine which methods have real data
+  const hasRealData = {
+    pca: exportedPca && exportedPca.length > 0,
+    tsne: exportedTsne && exportedTsne.length > 0,
+    umap: exportedUmap && exportedUmap.length > 0,
+  };
 
   // Generate simulated dimensionality reduction data (fallback)
   const generateClusteringData = (methodType: MethodType): DataPoint[] => {
@@ -72,34 +82,47 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
     return points;
   };
 
+  // Build lookup map for ranking info
+  const probBySampleId = new Map<string, { prob: number; pred: string; conf: number; correct: boolean; actual: string }>();
+  (data.profile_ranking?.all_rankings || []).forEach((r) => {
+    const sampleId = r.sample_id || r.sample_index?.toString();
+    probBySampleId.set(sampleId, {
+      prob: r.ensemble_probability,
+      pred: r.predicted_class,
+      conf: r.confidence,
+      correct: r.correct,
+      actual: r.actual_class,
+    });
+  });
+
+  // Helper to convert exported points to DataPoint[]
+  const convertExportedPoints = (points: typeof exportedPca): DataPoint[] => {
+    if (!points) return [];
+    return points.map((p) => {
+      const r = probBySampleId.get(p.sample_id);
+      return {
+        x: Number(p.x.toFixed(2)),
+        y: Number(p.y.toFixed(2)),
+        sampleId: p.sample_id,
+        actualClass: p.actual_class,
+        predictedClass: r ? (r.pred === "1" ? "Positive" : "Negative") : "-",
+        confidence: r?.conf ?? 0,
+        correct: r?.correct ?? false,
+      };
+    });
+  };
+
   const clusteringData: DataPoint[] = (() => {
-    if (method === "pca" && exportedPca && exportedPca.length > 0) {
-      const probBySample = new Map<number, { prob: number; pred: string; conf: number; correct: boolean; actual: string }>();
-      (data.profile_ranking?.all_rankings || []).forEach((r) => {
-        probBySample.set(r.sample_index, {
-          prob: r.ensemble_probability,
-          pred: r.predicted_class,
-          conf: r.confidence,
-          correct: r.correct,
-          actual: r.actual_class,
-        });
-      });
-
-      return exportedPca.map((p, idx) => {
-        const sampleIndex = idx + 1;
-        const r = probBySample.get(sampleIndex);
-        return {
-          x: Number(p.x.toFixed(2)),
-          y: Number(p.y.toFixed(2)),
-          sampleId: p.sample_id,
-          actualClass: p.actual_class,
-          predictedClass: r ? (r.pred === "1" ? "Positive" : "Negative") : "-",
-          confidence: r?.conf ?? 0,
-          correct: r?.correct ?? false,
-        };
-      });
+    if (method === "pca" && hasRealData.pca) {
+      return convertExportedPoints(exportedPca);
     }
-
+    if (method === "tsne" && hasRealData.tsne) {
+      return convertExportedPoints(exportedTsne);
+    }
+    if (method === "umap" && hasRealData.umap) {
+      return convertExportedPoints(exportedUmap);
+    }
+    // Fallback to simulated data
     return generateClusteringData(method);
   })();
 
@@ -201,7 +224,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
           <CardTitle className="flex items-center gap-2">
             Sample Clustering - {method.toUpperCase()}
             <Badge variant="outline" className="ml-2">
-              {method === "pca" && exportedPca && exportedPca.length > 0 ? "From analysis" : "Simulated"}
+              {hasRealData[method] ? "From analysis" : "Simulated"}
             </Badge>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
