@@ -14,6 +14,16 @@
 #   2. Sample annotation file (tab-delimited .txt or .tsv)
 #      - Must contain sample IDs and target variable column
 #
+# CONDA ENVIRONMENT:
+#   conda env create -f ml_classifier_env.yml
+#   conda activate ml_classifier
+#
+# ML METHOD NOTES:
+#   - XGBoost and MLP need larger datasets (>100 samples) for optimal performance
+#   - Random Forest, SVM and KNN are more robust on small datasets (<50 samples)
+#   - Hard/soft voting ensembles may fail if any base learner collapses
+#     (returns NA for all samples) - in such cases, soft voting is preferred
+#
 # Inspired by:
 # - IntelliGenes (https://github.com/drzeeshanahmed/intelligenes)
 # - Molecular Classification Analysis (https://github.com/CoLAB-AccelBio/molecular-classification-analysis)
@@ -32,6 +42,13 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)
 })
+
+# Optional: load t-SNE and UMAP libraries if available
+tsne_available <- requireNamespace("Rtsne", quietly = TRUE)
+umap_available <- requireNamespace("umap", quietly = TRUE)
+
+if (tsne_available) library(Rtsne)
+if (umap_available) library(umap)
 
 # =============================================================================
 # CONFIGURATION
@@ -282,6 +299,9 @@ load_data <- function(config) {
   log_message(sprintf("Reading expression matrix: %s", config$expression_matrix_file))
   expr_matrix <- read_tabular(config$expression_matrix_file)
   
+  # Store original expression values before transformation
+  original_expr_matrix <- expr_matrix
+  
   # Transpose: now rows = samples, columns = features
   expr_matrix <- as.data.frame(t(expr_matrix))
   sample_ids <- rownames(expr_matrix)
@@ -336,6 +356,16 @@ load_data <- function(config) {
     ))
   }
   
+  # Store preprocessing stats before modifications
+  preprocessing_stats <- list(
+    original_samples = length(sample_ids),
+    original_features = ncol(X),
+    missing_values = sum(is.na(X)),
+    missing_pct = round(sum(is.na(X)) / (nrow(X) * ncol(X)) * 100, 2),
+    class_distribution = as.list(table(y)),
+    constant_features_removed = 0
+  )
+  
   # Ensure X is numeric
   X <- as.data.frame(lapply(X, function(x) {
     if (is.character(x)) as.numeric(x) else x
@@ -345,6 +375,7 @@ load_data <- function(config) {
   constant_cols <- sapply(X, function(x) length(unique(x[!is.na(x)])) <= 1)
   if (any(constant_cols)) {
     log_message(sprintf("Removing %d constant columns", sum(constant_cols)), "WARN")
+    preprocessing_stats$constant_features_removed <- sum(constant_cols)
     X <- X[, !constant_cols]
   }
   
@@ -356,6 +387,9 @@ load_data <- function(config) {
       return(x)
     }))
   }
+  
+  # Store unscaled expression for boxplot export (subset to current features)
+  unscaled_expr <- X
   
   # Scale numeric features
   numeric_cols <- sapply(X, is.numeric)
@@ -370,7 +404,9 @@ load_data <- function(config) {
     X = X,
     y = y,
     sample_ids = sample_ids,
-    feature_names = colnames(X)
+    feature_names = colnames(X),
+    unscaled_expr = unscaled_expr,
+    preprocessing_stats = preprocessing_stats
   ))
 }
 
@@ -499,12 +535,16 @@ stepwise_selection <- function(X, y, max_features, seed = 42) {
   return(selected)
 }
 
-perform_feature_selection <- function(X, y, method, max_features, seed = 42) {
+perform_feature_selection <- function(X, y, method, max_features, seed) {
+  if (method == "none" || ncol(X) <= max_features) {
+    return(colnames(X))
+  }
+  
   switch(method,
     "forward" = forward_selection(X, y, max_features, seed),
-    "backward" = backward_elimination(X, y, max_features, seed),
+    "backward" = backward_elimination(X, y, min_features = max_features, seed = seed),
     "stepwise" = stepwise_selection(X, y, max_features, seed),
-    "none" = colnames(X)
+    colnames(X)
   )
 }
 
@@ -512,100 +552,124 @@ perform_feature_selection <- function(X, y, method, max_features, seed = 42) {
 # MODEL TRAINING
 # =============================================================================
 
+#' Safe get probability for class "1" from various probability outputs
+#' Handles matrix, vector, and NA cases gracefully
+safe_get_prob <- function(prob_output, target_class = "1", n = NULL) {
+  if (is.null(prob_output)) {
+    if (!is.null(n)) return(rep(0.5, n))
+    return(NA_real_)
+  }
+  
+  # If it's a matrix or data frame with class columns
+  if (is.matrix(prob_output) || is.data.frame(prob_output)) {
+    if (target_class %in% colnames(prob_output)) {
+      return(as.numeric(prob_output[, target_class]))
+    } else if (ncol(prob_output) >= 2) {
+      return(as.numeric(prob_output[, 2]))  # Assume second column is positive class
+    } else if (ncol(prob_output) == 1) {
+      return(as.numeric(prob_output[, 1]))
+    }
+  }
+  
+  # If it's already a vector
+  if (is.numeric(prob_output) && length(prob_output) > 0) {
+    return(as.numeric(prob_output))
+  }
+  
+  if (!is.null(n)) return(rep(0.5, n))
+  return(NA_real_)
+}
+
 train_rf <- function(X_train, y_train, config) {
-  mtry <- config$rf_mtry
-  if (is.null(mtry)) mtry <- floor(sqrt(ncol(X_train)))
+  mtry <- config$rf_mtry %||% floor(sqrt(ncol(X_train)))
   
-  model <- randomForest(x = X_train, y = y_train, ntree = config$rf_ntree,
-                        mtry = mtry, importance = TRUE)
-  importance <- importance(model, type = 2)[, 1]
+  model <- randomForest(
+    x = X_train,
+    y = y_train,
+    ntree = config$rf_ntree,
+    mtry = mtry,
+    importance = TRUE
+  )
   
-  return(list(model = model, importance = importance,
-              oob_error = model$err.rate[config$rf_ntree, "OOB"]))
+  importance <- model$importance[, "MeanDecreaseGini"]
+  names(importance) <- rownames(model$importance)
+  
+  return(list(model = model, importance = importance, oob_error = model$err.rate[nrow(model$err.rate), "OOB"]))
 }
 
 train_svm <- function(X_train, y_train, config) {
-  gamma <- config$svm_gamma
-  if (is.null(gamma)) gamma <- 1 / ncol(X_train)
+  gamma <- config$svm_gamma %||% (1 / ncol(X_train))
   
-  model <- svm(x = as.matrix(X_train), y = y_train, kernel = config$svm_kernel,
-               cost = config$svm_cost, gamma = gamma, probability = TRUE)
+  model <- svm(
+    x = as.matrix(X_train),
+    y = y_train,
+    kernel = config$svm_kernel,
+    cost = config$svm_cost,
+    gamma = gamma,
+    probability = TRUE
+  )
+  
   return(list(model = model))
 }
 
 train_xgboost <- function(X_train, y_train, config) {
-  X_matrix <- as.matrix(X_train)
+  # Convert labels to numeric (0/1)
   y_numeric <- as.numeric(y_train) - 1
-  dtrain <- xgb.DMatrix(data = X_matrix, label = y_numeric)
   
-  params <- list(objective = "binary:logistic", eval_metric = "auc",
-                max_depth = config$xgb_max_depth, eta = config$xgb_eta)
+  dtrain <- xgb.DMatrix(data = as.matrix(X_train), label = y_numeric)
   
-  model <- xgb.train(params = params, data = dtrain, 
-                     nrounds = config$xgb_nrounds, verbose = 0)
-  importance <- xgb.importance(model = model)
+  model <- xgb.train(
+    params = list(
+      objective = "binary:logistic",
+      eval_metric = "auc",
+      max_depth = config$xgb_max_depth,
+      eta = config$xgb_eta,
+      verbosity = 0
+    ),
+    data = dtrain,
+    nrounds = config$xgb_nrounds,
+    verbose = 0
+  )
   
-  return(list(model = model, importance = importance))
-}
-
-train_knn <- function(X_train, y_train, config) {
-  return(list(X_train = X_train, y_train = y_train, k = config$knn_k))
-}
-
-train_mlp <- function(X_train, y_train, config) {
-  model <- nnet(x = as.matrix(X_train), y = class.ind(y_train),
-                size = config$mlp_size, decay = config$mlp_decay,
-                maxit = config$mlp_maxit, softmax = TRUE, trace = FALSE)
   return(list(model = model))
 }
 
-# Prediction functions
-#' Safe extraction of class probability
-#' Handles cases where probability matrix may not have expected class columns
-#' @param prob_matrix Probability matrix from model prediction
-#' @param target_class Target class column name (default "1")
-#' @return Vector of probabilities
-safe_get_prob <- function(prob_matrix, target_class = "1", n = NULL, default = 0.5) {
-  # If we have no probability output (e.g., model couldn't be trained), return a
-  # neutral probability vector of length n when possible.
-  if (is.null(prob_matrix)) {
-    if (!is.null(n) && n > 0) return(rep(default, n))
-    return(numeric(0))
-  }
-
-  # Some predictors return a bare vector already
-  if (is.vector(prob_matrix)) {
-    return(as.numeric(prob_matrix))
-  }
-
-  if (!is.null(colnames(prob_matrix)) && target_class %in% colnames(prob_matrix)) {
-    return(as.numeric(prob_matrix[, target_class]))
-  }
-
-  if (ncol(prob_matrix) >= 2) {
-    # Common convention: second column is the positive class
-    return(as.numeric(prob_matrix[, 2]))
-  }
-
-  if (ncol(prob_matrix) == 1) {
-    return(as.numeric(prob_matrix[, 1]))
-  }
-
-  if (!is.null(n) && n > 0) return(rep(default, n))
-  return(numeric(0))
+train_knn <- function(X_train, y_train, config) {
+  return(list(
+    X_train = X_train,
+    y_train = y_train,
+    k = config$knn_k
+  ))
 }
+
+train_mlp <- function(X_train, y_train, config) {
+  model <- nnet(
+    x = as.matrix(X_train),
+    y = class.ind(y_train),
+    size = config$mlp_size,
+    decay = config$mlp_decay,
+    maxit = config$mlp_maxit,
+    softmax = TRUE,
+    trace = FALSE
+  )
+  
+  return(list(model = model))
+}
+
+# =============================================================================
+# MODEL PREDICTION
+# =============================================================================
 
 predict_rf <- function(model_obj, X_test) {
   pred <- predict(model_obj$model, X_test)
   prob_matrix <- predict(model_obj$model, X_test, type = "prob")
-  prob <- safe_get_prob(prob_matrix, "1", n = nrow(X_test))
+  prob <- safe_get_prob(prob_matrix, "1")
   return(list(predictions = pred, probabilities = prob))
 }
 
 predict_svm <- function(model_obj, X_test) {
-  pred <- predict(model_obj$model, as.matrix(X_test))
-  prob_attr <- predict(model_obj$model, as.matrix(X_test), probability = TRUE)
-  prob_matrix <- attr(prob_attr, "probabilities")
+  pred <- predict(model_obj$model, as.matrix(X_test), probability = TRUE)
+  prob_matrix <- attr(pred, "probabilities")
   prob <- safe_get_prob(prob_matrix, "1", n = nrow(X_test))
   return(list(predictions = pred, probabilities = prob))
 }
@@ -669,6 +733,16 @@ run_cv_all_methods <- function(X, y, config, selected_features = NULL) {
   # Collect per-fold importance for stability analysis
   fold_importance <- list()
   
+  # Collect per-fold AUROC and accuracy for distribution plots (actual data)
+  fold_metrics <- list(
+    rf = list(auroc = numeric(), accuracy = numeric()),
+    svm = list(auroc = numeric(), accuracy = numeric()),
+    xgboost = list(auroc = numeric(), accuracy = numeric()),
+    knn = list(auroc = numeric(), accuracy = numeric()),
+    mlp = list(auroc = numeric(), accuracy = numeric()),
+    soft_vote = list(auroc = numeric(), accuracy = numeric())
+  )
+  
   log_message(sprintf("Running %d-fold CV with %d repeats", config$n_folds, config$n_repeats))
   n_folds_total <- length(folds)
   
@@ -705,45 +779,61 @@ run_cv_all_methods <- function(X, y, config, selected_features = NULL) {
       result <- predict_rf(models$rf, X_test)
       preds$rf <- result$predictions
       probs$rf <- result$probabilities
-      all_results$rf[[i]] <- calculate_metrics(y_test, preds$rf, probs$rf)
+      metrics <- calculate_metrics(y_test, preds$rf, probs$rf)
+      all_results$rf[[i]] <- metrics
       if (!is.null(models$rf$importance)) {
         importance_scores[[length(importance_scores) + 1]] <- models$rf$importance
         fold_importance[[length(fold_importance) + 1]] <- models$rf$importance
       }
       # Collect for calibration
       cv_predictions$rf <- rbind(cv_predictions$rf, data.frame(actual = as.character(y_test), prob = probs$rf))
+      # Collect fold metrics
+      if (!is.na(metrics$auroc)) fold_metrics$rf$auroc <- c(fold_metrics$rf$auroc, metrics$auroc)
+      if (!is.na(metrics$accuracy)) fold_metrics$rf$accuracy <- c(fold_metrics$rf$accuracy, metrics$accuracy)
     }
     
     if (!is.null(models$svm)) {
       result <- predict_svm(models$svm, X_test)
       preds$svm <- result$predictions
       probs$svm <- result$probabilities
-      all_results$svm[[i]] <- calculate_metrics(y_test, preds$svm, probs$svm)
+      metrics <- calculate_metrics(y_test, preds$svm, probs$svm)
+      all_results$svm[[i]] <- metrics
       cv_predictions$svm <- rbind(cv_predictions$svm, data.frame(actual = as.character(y_test), prob = probs$svm))
+      if (!is.na(metrics$auroc)) fold_metrics$svm$auroc <- c(fold_metrics$svm$auroc, metrics$auroc)
+      if (!is.na(metrics$accuracy)) fold_metrics$svm$accuracy <- c(fold_metrics$svm$accuracy, metrics$accuracy)
     }
     
     if (!is.null(models$xgboost)) {
       result <- predict_xgboost(models$xgboost, X_test)
       preds$xgboost <- result$predictions
       probs$xgboost <- result$probabilities
-      all_results$xgboost[[i]] <- calculate_metrics(y_test, preds$xgboost, probs$xgboost)
+      metrics <- calculate_metrics(y_test, preds$xgboost, probs$xgboost)
+      all_results$xgboost[[i]] <- metrics
       cv_predictions$xgboost <- rbind(cv_predictions$xgboost, data.frame(actual = as.character(y_test), prob = probs$xgboost))
+      if (!is.na(metrics$auroc)) fold_metrics$xgboost$auroc <- c(fold_metrics$xgboost$auroc, metrics$auroc)
+      if (!is.na(metrics$accuracy)) fold_metrics$xgboost$accuracy <- c(fold_metrics$xgboost$accuracy, metrics$accuracy)
     }
     
     if (!is.null(models$knn)) {
       result <- predict_knn(models$knn, X_test)
       preds$knn <- result$predictions
       probs$knn <- result$probabilities
-      all_results$knn[[i]] <- calculate_metrics(y_test, preds$knn, probs$knn)
+      metrics <- calculate_metrics(y_test, preds$knn, probs$knn)
+      all_results$knn[[i]] <- metrics
       cv_predictions$knn <- rbind(cv_predictions$knn, data.frame(actual = as.character(y_test), prob = probs$knn))
+      if (!is.na(metrics$auroc)) fold_metrics$knn$auroc <- c(fold_metrics$knn$auroc, metrics$auroc)
+      if (!is.na(metrics$accuracy)) fold_metrics$knn$accuracy <- c(fold_metrics$knn$accuracy, metrics$accuracy)
     }
     
     if (!is.null(models$mlp)) {
       result <- predict_mlp(models$mlp, X_test)
       preds$mlp <- result$predictions
       probs$mlp <- result$probabilities
-      all_results$mlp[[i]] <- calculate_metrics(y_test, preds$mlp, probs$mlp)
+      metrics <- calculate_metrics(y_test, preds$mlp, probs$mlp)
+      all_results$mlp[[i]] <- metrics
       cv_predictions$mlp <- rbind(cv_predictions$mlp, data.frame(actual = as.character(y_test), prob = probs$mlp))
+      if (!is.na(metrics$auroc)) fold_metrics$mlp$auroc <- c(fold_metrics$mlp$auroc, metrics$auroc)
+      if (!is.na(metrics$accuracy)) fold_metrics$mlp$accuracy <- c(fold_metrics$mlp$accuracy, metrics$accuracy)
     }
     
     if (length(preds) > 1) {
@@ -751,10 +841,12 @@ run_cv_all_methods <- function(X, y, config, selected_features = NULL) {
       all_results$hard_vote[[i]] <- calculate_metrics(y_test, hard_pred)
       
       soft_result <- soft_voting(probs)
-      all_results$soft_vote[[i]] <- calculate_metrics(y_test, soft_result$predictions, 
-                                                       soft_result$probabilities)
+      soft_metrics <- calculate_metrics(y_test, soft_result$predictions, soft_result$probabilities)
+      all_results$soft_vote[[i]] <- soft_metrics
       cv_predictions$soft_vote <- rbind(cv_predictions$soft_vote, 
                                          data.frame(actual = as.character(y_test), prob = soft_result$probabilities))
+      if (!is.na(soft_metrics$auroc)) fold_metrics$soft_vote$auroc <- c(fold_metrics$soft_vote$auroc, soft_metrics$auroc)
+      if (!is.na(soft_metrics$accuracy)) fold_metrics$soft_vote$accuracy <- c(fold_metrics$soft_vote$accuracy, soft_metrics$accuracy)
     }
   }
   
@@ -769,7 +861,8 @@ run_cv_all_methods <- function(X, y, config, selected_features = NULL) {
     results = all_results, 
     feature_importance = feature_importance,
     cv_predictions = cv_predictions,
-    fold_importance = fold_importance
+    fold_importance = fold_importance,
+    fold_metrics = fold_metrics
   ))
 }
 
@@ -783,8 +876,20 @@ run_permutation_test <- function(X, y, config, selected_features = NULL) {
   
   if (!is.null(selected_features)) X <- X[, selected_features, drop = FALSE]
   
-  permutation_results <- list(rf_oob_error = numeric(n_permutations),
-                              rf_auroc = numeric(n_permutations))
+  # Store per-model permutation metrics for distribution plots
+  permutation_results <- list(
+    rf_oob_error = numeric(n_permutations),
+    rf_auroc = numeric(n_permutations),
+    # Per-model auroc and accuracy distributions
+    per_model = list(
+      rf = list(auroc = numeric(n_permutations), accuracy = numeric(n_permutations)),
+      svm = list(auroc = numeric(n_permutations), accuracy = numeric(n_permutations)),
+      xgboost = list(auroc = numeric(n_permutations), accuracy = numeric(n_permutations)),
+      knn = list(auroc = numeric(n_permutations), accuracy = numeric(n_permutations)),
+      mlp = list(auroc = numeric(n_permutations), accuracy = numeric(n_permutations)),
+      soft_vote = list(auroc = numeric(n_permutations), accuracy = numeric(n_permutations))
+    )
+  )
   
   set.seed(config$seed)
   folds <- createFolds(y, k = config$n_folds)
@@ -795,6 +900,7 @@ run_permutation_test <- function(X, y, config, selected_features = NULL) {
     
     y_permuted <- sample(y)
     
+    # RF OOB error
     rf_model <- tryCatch({
       randomForest(x = X, y = y_permuted, ntree = min(config$rf_ntree, 200), importance = FALSE)
     }, error = function(e) NULL)
@@ -803,23 +909,116 @@ run_permutation_test <- function(X, y, config, selected_features = NULL) {
       permutation_results$rf_oob_error[p] <- rf_model$err.rate[nrow(rf_model$err.rate), "OOB"]
     }
     
-    cv_probs <- numeric(length(y))
+    # Collect CV predictions per model for this permutation
+    cv_probs_rf <- numeric(length(y))
+    cv_probs_svm <- numeric(length(y))
+    cv_probs_xgb <- numeric(length(y))
+    cv_probs_knn <- numeric(length(y))
+    cv_probs_mlp <- numeric(length(y))
+    cv_probs_soft <- numeric(length(y))
+    
+    cv_preds_rf <- character(length(y))
+    cv_preds_svm <- character(length(y))
+    cv_preds_xgb <- character(length(y))
+    cv_preds_knn <- character(length(y))
+    cv_preds_mlp <- character(length(y))
+    cv_preds_soft <- character(length(y))
+    
     for (fold in folds) {
       train_idx <- setdiff(1:length(y), fold)
-      rf_fold <- tryCatch({
-        randomForest(x = X[train_idx, ], y = y_permuted[train_idx], ntree = 100, importance = FALSE)
-      }, error = function(e) NULL)
+      test_idx <- fold
       
+      X_train <- X[train_idx, , drop = FALSE]
+      X_test <- X[test_idx, , drop = FALSE]
+      y_train <- y_permuted[train_idx]
+      y_test <- y_permuted[test_idx]
+      
+      probs_list <- list()
+      
+      # RF
+      rf_fold <- tryCatch(train_rf(X_train, y_train, config), error = function(e) NULL)
       if (!is.null(rf_fold)) {
-        prob_matrix <- predict(rf_fold, X[fold, ], type = "prob")
-        cv_probs[fold] <- safe_get_prob(prob_matrix, "1")
+        res <- predict_rf(rf_fold, X_test)
+        cv_probs_rf[test_idx] <- res$probabilities
+        cv_preds_rf[test_idx] <- as.character(res$predictions)
+        probs_list$rf <- res$probabilities
+      }
+      
+      # SVM
+      svm_fold <- tryCatch(train_svm(X_train, y_train, config), error = function(e) NULL)
+      if (!is.null(svm_fold)) {
+        res <- predict_svm(svm_fold, X_test)
+        cv_probs_svm[test_idx] <- res$probabilities
+        cv_preds_svm[test_idx] <- as.character(res$predictions)
+        probs_list$svm <- res$probabilities
+      }
+      
+      # XGBoost
+      xgb_fold <- tryCatch(train_xgboost(X_train, y_train, config), error = function(e) NULL)
+      if (!is.null(xgb_fold)) {
+        res <- predict_xgboost(xgb_fold, X_test)
+        cv_probs_xgb[test_idx] <- res$probabilities
+        cv_preds_xgb[test_idx] <- as.character(res$predictions)
+        probs_list$xgb <- res$probabilities
+      }
+      
+      # KNN
+      knn_fold <- tryCatch(train_knn(X_train, y_train, config), error = function(e) NULL)
+      if (!is.null(knn_fold)) {
+        res <- predict_knn(knn_fold, X_test)
+        cv_probs_knn[test_idx] <- res$probabilities
+        cv_preds_knn[test_idx] <- as.character(res$predictions)
+        probs_list$knn <- res$probabilities
+      }
+      
+      # MLP
+      mlp_fold <- tryCatch(train_mlp(X_train, y_train, config), error = function(e) NULL)
+      if (!is.null(mlp_fold)) {
+        res <- predict_mlp(mlp_fold, X_test)
+        cv_probs_mlp[test_idx] <- res$probabilities
+        cv_preds_mlp[test_idx] <- as.character(res$predictions)
+        probs_list$mlp <- res$probabilities
+      }
+      
+      # Soft voting for this fold
+      if (length(probs_list) > 1) {
+        soft_res <- soft_voting(probs_list)
+        cv_probs_soft[test_idx] <- soft_res$probabilities
+        cv_preds_soft[test_idx] <- as.character(soft_res$predictions)
       }
     }
     
-    if (any(cv_probs > 0)) {
-      roc_obj <- tryCatch({ roc(y_permuted, cv_probs, quiet = TRUE) }, error = function(e) NULL)
-      if (!is.null(roc_obj)) permutation_results$rf_auroc[p] <- as.numeric(auc(roc_obj))
+    # Calculate metrics for each model on permuted data
+    calc_auroc <- function(probs, actual) {
+      if (all(probs == 0)) return(NA_real_)
+      roc_obj <- tryCatch(roc(actual, probs, quiet = TRUE), error = function(e) NULL)
+      if (!is.null(roc_obj)) return(as.numeric(auc(roc_obj)))
+      return(NA_real_)
     }
+    
+    calc_accuracy <- function(preds, actual) {
+      if (all(preds == "")) return(NA_real_)
+      return(mean(preds == as.character(actual), na.rm = TRUE))
+    }
+    
+    permutation_results$rf_auroc[p] <- calc_auroc(cv_probs_rf, y_permuted)
+    permutation_results$per_model$rf$auroc[p] <- calc_auroc(cv_probs_rf, y_permuted)
+    permutation_results$per_model$rf$accuracy[p] <- calc_accuracy(cv_preds_rf, y_permuted)
+    
+    permutation_results$per_model$svm$auroc[p] <- calc_auroc(cv_probs_svm, y_permuted)
+    permutation_results$per_model$svm$accuracy[p] <- calc_accuracy(cv_preds_svm, y_permuted)
+    
+    permutation_results$per_model$xgboost$auroc[p] <- calc_auroc(cv_probs_xgb, y_permuted)
+    permutation_results$per_model$xgboost$accuracy[p] <- calc_accuracy(cv_preds_xgb, y_permuted)
+    
+    permutation_results$per_model$knn$auroc[p] <- calc_auroc(cv_probs_knn, y_permuted)
+    permutation_results$per_model$knn$accuracy[p] <- calc_accuracy(cv_preds_knn, y_permuted)
+    
+    permutation_results$per_model$mlp$auroc[p] <- calc_auroc(cv_probs_mlp, y_permuted)
+    permutation_results$per_model$mlp$accuracy[p] <- calc_accuracy(cv_preds_mlp, y_permuted)
+    
+    permutation_results$per_model$soft_vote$auroc[p] <- calc_auroc(cv_probs_soft, y_permuted)
+    permutation_results$per_model$soft_vote$accuracy[p] <- calc_accuracy(cv_preds_soft, y_permuted)
   }
   
   return(permutation_results)
@@ -829,7 +1028,7 @@ run_permutation_test <- function(X, y, config, selected_features = NULL) {
 # PROFILE RANKING
 # =============================================================================
 
-rank_profiles <- function(X, y, models, config) {
+rank_profiles <- function(X, y, models, config, sample_ids = NULL) {
   log_message("Ranking profiles by prediction confidence...")
 
   all_probs <- list()
@@ -867,8 +1066,12 @@ rank_profiles <- function(X, y, models, config) {
 
   confidence <- abs(avg_prob - 0.5) * 2
 
+  # Use sample_ids if provided (for proper sample names)
+  sample_names <- if (!is.null(sample_ids)) sample_ids else as.character(1:nrow(X))
+
   ranking <- data.frame(
     sample_index = 1:nrow(X),
+    sample_id = sample_names,
     actual_class = as.character(y),
     ensemble_probability = avg_prob,
     predicted_class = ifelse(avg_prob > 0.5, "1", "0"),
@@ -945,7 +1148,7 @@ aggregate_results <- function(results_list) {
 }
 
 # =============================================================================
-# DERIVED EXPORTS (Calibration / Clustering / Stability)
+# DERIVED EXPORTS (Calibration / Clustering / Stability / Expression Boxplots)
 # =============================================================================
 
 compute_calibration_curve <- function(actual, prob, n_bins = 10) {
@@ -960,8 +1163,8 @@ compute_calibration_curve <- function(actual, prob, n_bins = 10) {
 
   df$bin <- cut(df$prob, breaks = seq(0, 1, length.out = n_bins + 1), include.lowest = TRUE)
 
-  agg <- df %>
-    group_by(bin) %>
+  agg <- df %>%
+    group_by(bin) %>%
     summarise(
       mean_pred = mean(prob, na.rm = TRUE),
       frac_pos = mean(y01, na.rm = TRUE),
@@ -1002,6 +1205,51 @@ compute_pca_embedding <- function(X, y, sample_ids = NULL) {
   return(list(points = coords, variance_explained = variance_explained))
 }
 
+compute_tsne_embedding <- function(X, y, sample_ids = NULL) {
+  if (!tsne_available) return(NULL)
+  if (nrow(X) < 4) return(NULL)
+  
+  perp <- min(30, floor((nrow(X) - 1) / 3))
+  if (perp < 1) return(NULL)
+  
+  tsne_res <- tryCatch({
+    Rtsne::Rtsne(as.matrix(X), dims = 2, perplexity = perp, verbose = FALSE, check_duplicates = FALSE)
+  }, error = function(e) NULL)
+  
+  if (is.null(tsne_res)) return(NULL)
+  
+  coords <- as.data.frame(tsne_res$Y)
+  colnames(coords) <- c("x", "y")
+  coords$sample_id <- if (!is.null(sample_ids)) sample_ids else rownames(X)
+  coords$actual_class <- as.character(y)
+  
+  return(list(points = coords))
+}
+
+compute_umap_embedding <- function(X, y, sample_ids = NULL) {
+  if (!umap_available) return(NULL)
+  if (nrow(X) < 4) return(NULL)
+  
+  n_neighbors <- min(15, nrow(X) - 1)
+  if (n_neighbors < 2) return(NULL)
+  
+  umap_config <- umap::umap.defaults
+  umap_config$n_neighbors <- n_neighbors
+  
+  umap_res <- tryCatch({
+    umap::umap(as.matrix(X), config = umap_config)
+  }, error = function(e) NULL)
+  
+  if (is.null(umap_res)) return(NULL)
+  
+  coords <- as.data.frame(umap_res$layout)
+  colnames(coords) <- c("x", "y")
+  coords$sample_id <- if (!is.null(sample_ids)) sample_ids else rownames(X)
+  coords$actual_class <- as.character(y)
+  
+  return(list(points = coords))
+}
+
 compute_feature_importance_stability <- function(fold_importance, top_n = 50) {
   if (length(fold_importance) == 0) return(NULL)
 
@@ -1033,6 +1281,49 @@ compute_feature_importance_stability <- function(fold_importance, top_n = 50) {
   return(head(out, top_n))
 }
 
+#' Compute box plot statistics for top N features by class
+compute_feature_boxplot_stats <- function(unscaled_expr, y, top_features, top_n = 20) {
+  if (is.null(unscaled_expr) || nrow(unscaled_expr) == 0) return(NULL)
+  if (is.null(top_features) || length(top_features) == 0) return(NULL)
+  
+  # Use only features that exist in unscaled expression
+  available_features <- intersect(top_features, colnames(unscaled_expr))
+  if (length(available_features) == 0) return(NULL)
+  
+  features_to_use <- head(available_features, top_n)
+  
+  result <- list()
+  classes <- levels(y)
+  
+  for (feat in features_to_use) {
+    values <- unscaled_expr[[feat]]
+    
+    class_stats <- lapply(classes, function(cls) {
+      cls_values <- values[y == cls]
+      cls_values <- cls_values[!is.na(cls_values)]
+      if (length(cls_values) == 0) return(NULL)
+      
+      q <- quantile(cls_values, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE)
+      
+      list(
+        class = cls,
+        min = as.numeric(q[1]),
+        q1 = as.numeric(q[2]),
+        median = as.numeric(q[3]),
+        q3 = as.numeric(q[4]),
+        max = as.numeric(q[5]),
+        mean = mean(cls_values, na.rm = TRUE),
+        n = length(cls_values)
+      )
+    })
+    class_stats <- Filter(Negate(is.null), class_stats)
+    
+    result[[feat]] <- class_stats
+  }
+  
+  return(result)
+}
+
 # =============================================================================
 # JSON EXPORT
 # =============================================================================
@@ -1046,11 +1337,13 @@ export_to_json <- function(results, config, output_path) {
       config = config,
       r_version = R.version.string
     ),
+    preprocessing = results$preprocessing_stats,
     model_performance = results$summary,
     feature_importance = if (!is.null(results$feature_importance)) {
       head(results$feature_importance, 50)
     } else NULL,
     feature_importance_stability = results$feature_importance_stability,
+    feature_boxplot_stats = results$feature_boxplot_stats,
     calibration_curves = results$calibration_curves,
     clustering = results$clustering,
     permutation_testing = if (!is.null(results$permutation)) {
@@ -1071,6 +1364,10 @@ export_to_json <- function(results, config, output_path) {
         )
       )
     } else NULL,
+    permutation_distributions = if (!is.null(results$permutation$per_model)) {
+      results$permutation$per_model
+    } else NULL,
+    actual_distributions = results$fold_metrics,
     profile_ranking = if (!is.null(results$ranking)) {
       list(top_profiles = results$ranking[results$ranking$top_profile, ],
            all_rankings = results$ranking)
@@ -1157,24 +1454,43 @@ run_pipeline <- function(config) {
   log_message(paste(rep("=", 60), collapse = ""))
   log_message("PROFILE RANKING")
 
-  ranking <- rank_profiles(X_selected, data$y, final_models, config)
+  ranking <- rank_profiles(X_selected, data$y, final_models, config, sample_ids = data$sample_ids)
 
-  # Clustering (PCA) export
+  # Clustering exports (PCA, t-SNE, UMAP)
+  log_message(paste(rep("=", 60), collapse = ""))
+  log_message("DIMENSIONALITY REDUCTION (PCA, t-SNE, UMAP)")
+  
   clustering <- list(
-    pca = compute_pca_embedding(X_selected, data$y, sample_ids = data$sample_ids)
+    pca = compute_pca_embedding(X_selected, data$y, sample_ids = data$sample_ids),
+    tsne = compute_tsne_embedding(X_selected, data$y, sample_ids = data$sample_ids),
+    umap = compute_umap_embedding(X_selected, data$y, sample_ids = data$sample_ids)
   )
+  
+  if (is.null(clustering$tsne)) log_message("t-SNE not computed (Rtsne package not available or insufficient samples)", "WARN")
+  if (is.null(clustering$umap)) log_message("UMAP not computed (umap package not available or insufficient samples)", "WARN")
+
+  # Compute feature boxplot stats for top features
+  top_feature_names <- if (!is.null(cv_results$feature_importance$feature)) {
+    head(cv_results$feature_importance$feature, 20)
+  } else {
+    head(selected_features, 20)
+  }
+  feature_boxplot_stats <- compute_feature_boxplot_stats(data$unscaled_expr, data$y, top_feature_names, top_n = 20)
 
   # Export results
   results <- list(
     summary = summary,
     feature_importance = cv_results$feature_importance,
     feature_importance_stability = feature_importance_stability,
+    feature_boxplot_stats = feature_boxplot_stats,
     calibration_curves = calibration_curves,
     clustering = clustering,
     permutation = permutation_results,
     original_metrics = original_metrics,
+    fold_metrics = cv_results$fold_metrics,
     ranking = ranking,
     selected_features = selected_features,
+    preprocessing_stats = data$preprocessing_stats,
     dataset_name = basename(config$expression_matrix_file)
   )
 

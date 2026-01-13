@@ -68,7 +68,7 @@ export interface CalibrationCurvePoint {
 
 export type CalibrationCurves = Record<string, CalibrationCurvePoint[]>;
 
-export interface PCAClusteringPoint {
+export interface ClusteringPoint {
   x: number;
   y: number;
   sample_id: string;
@@ -77,11 +77,17 @@ export interface PCAClusteringPoint {
 
 export interface ClusteringExport {
   pca?: {
-    points: PCAClusteringPoint[];
+    points: ClusteringPoint[];
     variance_explained?: {
       pc1: number;
       pc2: number;
     };
+  } | null;
+  tsne?: {
+    points: ClusteringPoint[];
+  } | null;
+  umap?: {
+    points: ClusteringPoint[];
   } | null;
 }
 
@@ -92,6 +98,29 @@ export interface PermutationMetric {
   p_value: number;
 }
 
+export interface PermutationDistribution {
+  auroc: number[];
+  accuracy: number[];
+}
+
+export interface PermutationDistributions {
+  rf?: PermutationDistribution;
+  svm?: PermutationDistribution;
+  xgboost?: PermutationDistribution;
+  knn?: PermutationDistribution;
+  mlp?: PermutationDistribution;
+  soft_vote?: PermutationDistribution;
+}
+
+export interface ActualDistributions {
+  rf?: PermutationDistribution;
+  svm?: PermutationDistribution;
+  xgboost?: PermutationDistribution;
+  knn?: PermutationDistribution;
+  mlp?: PermutationDistribution;
+  soft_vote?: PermutationDistribution;
+}
+
 export interface PermutationTesting {
   rf_oob_error: PermutationMetric;
   rf_auroc: PermutationMetric;
@@ -99,6 +128,7 @@ export interface PermutationTesting {
 
 export interface ProfileRanking {
   sample_index: number;
+  sample_id?: string;
   actual_class: string;
   ensemble_probability: number;
   predicted_class: string;
@@ -106,6 +136,26 @@ export interface ProfileRanking {
   correct: boolean;
   rank: number;
   top_profile: boolean;
+}
+
+export interface FeatureBoxplotClassStats {
+  class: string;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  mean: number;
+  n: number;
+}
+
+export interface PreprocessingStats {
+  original_samples: number;
+  original_features: number;
+  missing_values: number;
+  missing_pct: number;
+  class_distribution: Record<string, number>;
+  constant_features_removed: number;
 }
 
 export interface MLResultsConfig {
@@ -134,12 +184,16 @@ export interface MLResultsMetadata {
 
 export interface MLResults {
   metadata: MLResultsMetadata;
+  preprocessing?: PreprocessingStats | null;
   model_performance: ModelPerformance;
   feature_importance: FeatureImportance[];
   feature_importance_stability?: FeatureImportanceStability[] | null;
+  feature_boxplot_stats?: Record<string, FeatureBoxplotClassStats[]> | null;
   calibration_curves?: CalibrationCurves | null;
   clustering?: ClusteringExport | null;
   permutation_testing: PermutationTesting | null;
+  permutation_distributions?: PermutationDistributions | null;
+  actual_distributions?: ActualDistributions | null;
   profile_ranking: {
     top_profiles: ProfileRanking[];
     all_rankings: ProfileRanking[];

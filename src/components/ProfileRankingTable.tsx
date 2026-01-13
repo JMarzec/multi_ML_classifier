@@ -164,7 +164,7 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="font-mono">{row.sample_index}</TableCell>
+                <TableCell className="font-mono">{row.sample_id || row.sample_index}</TableCell>
                 <TableCell>
                   <Badge variant={row.actual_class === "1" ? "default" : "outline"}>
                     {row.actual_class === "1" ? "Positive" : "Negative"}

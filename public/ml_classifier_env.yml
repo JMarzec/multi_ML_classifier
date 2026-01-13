@@ -1,0 +1,22 @@
+name: ml_classifier
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base>=4.1
+  - r-caret
+  - r-randomforest
+  - r-e1071
+  - r-xgboost
+  - r-class
+  - r-nnet
+  - r-proc
+  - r-jsonlite
+  - r-dplyr
+  - r-tidyr
+  - r-rtsne
+  - r-umap
+  # For parallel processing (optional)
+  - r-doparallel
+  - r-foreach
