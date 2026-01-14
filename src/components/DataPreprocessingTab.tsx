@@ -11,41 +11,52 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { Database, Users, Layers, GitBranch } from "lucide-react";
+import { Database, Users, Layers, GitBranch, AlertTriangle, CheckCircle2, FileText, Hash } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { MLResults } from "@/types/ml-results";
 
 interface DataPreprocessingTabProps {
   data: MLResults;
 }
 
-const CLASS_COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))"];
+const CLASS_COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--info))"];
 
 export function DataPreprocessingTab({ data }: DataPreprocessingTabProps) {
+  // Use preprocessing stats from R script if available
+  const preprocessing = data.preprocessing;
+  
   const stats = useMemo(() => {
-    // Extract statistics from the data
     const rankings = data.profile_ranking?.all_rankings || [];
-    const totalSamples = rankings.length;
+    const totalSamples = preprocessing?.original_samples || rankings.length;
     
-    // Class distribution from rankings
-    const classDistribution = rankings.reduce((acc, r) => {
-      acc[r.actual_class] = (acc[r.actual_class] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    // Class distribution from preprocessing or rankings
+    let classData: { name: string; value: number; percentage: string }[] = [];
     
-    const classData = Object.entries(classDistribution).map(([cls, count]) => ({
-      name: `Class ${cls}`,
-      value: count,
-      percentage: totalSamples > 0 ? ((count / totalSamples) * 100).toFixed(1) : "0",
-    }));
+    if (preprocessing?.class_distribution) {
+      const classDistribution = preprocessing.class_distribution;
+      const total = Object.values(classDistribution).reduce((a, b) => a + b, 0);
+      classData = Object.entries(classDistribution).map(([cls, count]) => ({
+        name: `Class ${cls}`,
+        value: count,
+        percentage: total > 0 ? ((count / total) * 100).toFixed(1) : "0",
+      }));
+    } else if (rankings.length > 0) {
+      const classDistribution = rankings.reduce((acc, r) => {
+        acc[r.actual_class] = (acc[r.actual_class] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      classData = Object.entries(classDistribution).map(([cls, count]) => ({
+        name: `Class ${cls}`,
+        value: count,
+        percentage: totalSamples > 0 ? ((count / totalSamples) * 100).toFixed(1) : "0",
+      }));
+    }
     
-    // Feature statistics
     const numFeatures = data.selected_features?.length || 0;
-    const totalFeatures = data.feature_importance?.length || numFeatures;
-    
-    // Top features summary
+    const totalFeatures = preprocessing?.original_features || data.feature_importance?.length || numFeatures;
     const topFeatures = data.feature_importance?.slice(0, 10) || [];
     
-    // Correct/incorrect predictions
     const correctPredictions = rankings.filter(r => r.correct).length;
     const incorrectPredictions = rankings.filter(r => !r.correct).length;
     
@@ -57,17 +68,99 @@ export function DataPreprocessingTab({ data }: DataPreprocessingTabProps) {
       topFeatures,
       correctPredictions,
       incorrectPredictions,
-      accuracyFromRankings: totalSamples > 0 ? (correctPredictions / totalSamples) * 100 : 0,
+      accuracyFromRankings: rankings.length > 0 ? (correctPredictions / rankings.length) * 100 : 0,
     };
-  }, [data]);
+  }, [data, preprocessing]);
 
   const predictionData = [
     { name: "Correct", value: stats.correctPredictions, fill: "hsl(var(--accent))" },
     { name: "Incorrect", value: stats.incorrectPredictions, fill: "hsl(var(--destructive))" },
   ];
 
+  // Calculate class imbalance ratio
+  const classImbalanceRatio = useMemo(() => {
+    if (stats.classData.length < 2) return null;
+    const counts = stats.classData.map(c => c.value);
+    const maxCount = Math.max(...counts);
+    const minCount = Math.min(...counts);
+    return minCount > 0 ? (maxCount / minCount).toFixed(2) : "∞";
+  }, [stats.classData]);
+
   return (
     <div className="space-y-6">
+      {/* Preprocessing Statistics from R Script */}
+      {preprocessing && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Preprocessing Statistics
+              <Badge variant="outline" className="ml-2">From R Script</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Users className="w-4 h-4 text-primary" />
+                </div>
+                <p className="text-xs text-muted-foreground">Original Samples</p>
+                <p className="text-2xl font-bold">{preprocessing.original_samples}</p>
+              </div>
+              
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Hash className="w-4 h-4 text-secondary" />
+                </div>
+                <p className="text-xs text-muted-foreground">Original Features</p>
+                <p className="text-2xl font-bold">{preprocessing.original_features}</p>
+              </div>
+              
+              <div className={`rounded-lg p-4 text-center ${preprocessing.missing_values > 0 ? 'bg-warning/20' : 'bg-success/20'}`}>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  {preprocessing.missing_values > 0 ? (
+                    <AlertTriangle className="w-4 h-4 text-warning" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-success" />
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Missing Values</p>
+                <p className="text-2xl font-bold">
+                  {preprocessing.missing_values}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">
+                    ({preprocessing.missing_pct}%)
+                  </span>
+                </p>
+              </div>
+              
+              <div className={`rounded-lg p-4 text-center ${preprocessing.constant_features_removed > 0 ? 'bg-warning/20' : 'bg-muted/30'}`}>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Layers className="w-4 h-4 text-accent" />
+                </div>
+                <p className="text-xs text-muted-foreground">Constant Features Removed</p>
+                <p className="text-2xl font-bold">{preprocessing.constant_features_removed}</p>
+              </div>
+              
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Database className="w-4 h-4 text-info" />
+                </div>
+                <p className="text-xs text-muted-foreground">Classes</p>
+                <p className="text-2xl font-bold">{Object.keys(preprocessing.class_distribution).length}</p>
+              </div>
+              
+              <div className={`rounded-lg p-4 text-center ${classImbalanceRatio && parseFloat(classImbalanceRatio) > 2 ? 'bg-warning/20' : 'bg-muted/30'}`}>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <GitBranch className="w-4 h-4 text-warning" />
+                </div>
+                <p className="text-xs text-muted-foreground">Class Imbalance Ratio</p>
+                <p className="text-2xl font-bold">{classImbalanceRatio || "N/A"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card rounded-xl p-5 border border-border">
@@ -175,7 +268,7 @@ export function DataPreprocessingTab({ data }: DataPreprocessingTabProps) {
         {/* Prediction Accuracy */}
         <div className="bg-card rounded-xl p-6 border border-border">
           <h3 className="text-lg font-semibold mb-4">Prediction Results</h3>
-          {stats.totalSamples > 0 ? (
+          {stats.totalSamples > 0 && (stats.correctPredictions > 0 || stats.incorrectPredictions > 0) ? (
             <div className="flex items-center gap-8">
               <ResponsiveContainer width="50%" height={200}>
                 <PieChart>

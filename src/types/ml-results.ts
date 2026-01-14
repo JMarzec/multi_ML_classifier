@@ -149,6 +149,54 @@ export interface FeatureBoxplotClassStats {
   n: number;
 }
 
+// ============================================================================
+// SURVIVAL ANALYSIS TYPES
+// ============================================================================
+
+export interface SurvivalStats {
+  logrank_p: number;
+  cox_hr: number;
+  cox_hr_lower: number;
+  cox_hr_upper: number;
+  cox_p: number;
+}
+
+export interface KaplanMeierPoint {
+  time: number;
+  surv: number;
+  lower: number;
+  upper: number;
+  n_risk: number;
+  n_event: number;
+  n_censor: number;
+  strata?: string;
+}
+
+export interface PerGeneSurvival {
+  gene: string;
+  logrank_p: number;
+  cox_hr: number;
+  cox_hr_lower: number;
+  cox_hr_upper: number;
+  cox_p: number;
+  high_median_surv: number | null;
+  low_median_surv: number | null;
+}
+
+export interface ModelRiskScoreSurvival {
+  model: string;
+  stats: SurvivalStats;
+  km_curve_high: KaplanMeierPoint[];
+  km_curve_low: KaplanMeierPoint[];
+}
+
+export interface SurvivalAnalysis {
+  time_variable: string;
+  event_variable: string;
+  per_gene: PerGeneSurvival[];
+  model_risk_scores?: ModelRiskScoreSurvival[];
+}
+
 export interface PreprocessingStats {
   original_samples: number;
   original_features: number;
@@ -199,4 +247,5 @@ export interface MLResults {
     all_rankings: ProfileRanking[];
   } | null;
   selected_features: string[];
+  survival_analysis?: SurvivalAnalysis | null;
 }

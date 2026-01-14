@@ -20,7 +20,8 @@ import {
   GitBranch,
   Info,
   BoxSelect,
-  Activity
+  Activity,
+  Filter
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -44,6 +45,7 @@ import { CVFoldVisualizationTab } from "./CVFoldVisualizationTab";
 import { FeatureExpressionBoxplotTab } from "./FeatureExpressionBoxplotTab";
 import { PermutationDistributionTab } from "./PermutationDistributionTab";
 import { MLMethodInfoPanel } from "./MLMethodInfoPanel";
+import { FeatureSelectionVisualization } from "./FeatureSelectionVisualization";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -210,6 +212,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               <Brain className="w-4 h-4 mr-2" />
               Features
             </TabsTrigger>
+            <TabsTrigger value="feature-selection" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
+              <Filter className="w-4 h-4 mr-2" />
+              Selection
+            </TabsTrigger>
             <TabsTrigger value="boxplots" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <BoxSelect className="w-4 h-4 mr-2" />
               Expression
@@ -365,6 +371,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
             )}
 
             <FeatureImportanceStabilityTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="feature-selection">
+            <FeatureSelectionVisualization data={data} />
           </TabsContent>
 
           <TabsContent value="boxplots">
