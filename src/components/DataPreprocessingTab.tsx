@@ -158,6 +158,54 @@ export function DataPreprocessingTab({ data }: DataPreprocessingTabProps) {
               </div>
             </div>
 
+            {/* Train/Test Split Summary Card */}
+            {!preprocessing.full_training_mode && preprocessing.cv_folds && (
+              <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-xl p-6 border border-primary/20">
+                <h4 className="font-semibold flex items-center gap-2 mb-3">
+                  <GitBranch className="w-4 h-4 text-primary" />
+                  Training vs Testing Data Split Summary
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-primary/20 rounded-lg p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Training Data</p>
+                    <p className="text-3xl font-bold text-primary">
+                      {(((preprocessing.cv_folds - 1) / preprocessing.cv_folds) * 100).toFixed(0)}%
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      ~{preprocessing.train_samples_per_fold || Math.floor(preprocessing.original_samples * (preprocessing.cv_folds - 1) / preprocessing.cv_folds)} samples/fold
+                    </p>
+                  </div>
+                  <div className="bg-secondary/20 rounded-lg p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Testing Data</p>
+                    <p className="text-3xl font-bold text-secondary">
+                      {((1 / preprocessing.cv_folds) * 100).toFixed(0)}%
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      ~{preprocessing.test_samples_per_fold || Math.ceil(preprocessing.original_samples / preprocessing.cv_folds)} samples/fold
+                    </p>
+                  </div>
+                  <div className="bg-accent/20 rounded-lg p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Total CV Iterations</p>
+                    <p className="text-3xl font-bold text-accent">
+                      {preprocessing.cv_folds * (preprocessing.cv_repeats || 1)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {preprocessing.cv_folds} folds × {preprocessing.cv_repeats || 1} repeats
+                    </p>
+                  </div>
+                  <div className="bg-info/20 rounded-lg p-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Validation Ratio</p>
+                    <p className="text-3xl font-bold text-info">
+                      {(preprocessing.cv_folds - 1)}:1
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Train : Test per fold
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Train/Test Split Information */}
             {preprocessing.full_training_mode ? (
               <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">

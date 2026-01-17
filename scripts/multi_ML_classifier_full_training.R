@@ -20,6 +20,10 @@ suppressPackageStartupMessages({
   library(tidyr)
 })
 
+# Optional survival analysis
+survival_available <- requireNamespace("survival", quietly = TRUE)
+if (survival_available) library(survival)
+
 # =============================================================================
 # PARAMETERS
 # =============================================================================
@@ -113,6 +117,8 @@ config <- list(
   mlp_decay = 0.01,
   mlp_maxit = 200,
   batch_datasets = NULL,
+  time_variable = NULL,   # Survival analysis: time-to-event column
+  event_variable = NULL,  # Survival analysis: event status column
   output_dir = "./results",
   output_json = "ml_results.json"
 )
