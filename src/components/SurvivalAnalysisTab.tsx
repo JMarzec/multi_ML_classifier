@@ -161,7 +161,7 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                 ))}
               </div>
 
-              {selectedGene && (
+              {selectedGene && sortedGenes.find(g => g.gene === selectedGene) && (
                 <KaplanMeierCurve
                   gene={sortedGenes.find(g => g.gene === selectedGene)!}
                 />
@@ -351,7 +351,7 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                   ))}
                 </div>
 
-                {selectedModel && (
+                {selectedModel && modelSurvivalData.find(m => m.model === selectedModel) && (
                   <ModelKaplanMeierCurve
                     data={modelSurvivalData.find(m => m.model === selectedModel)!}
                   />
@@ -376,9 +376,11 @@ function KaplanMeierCurve({ gene }: { gene: PerGeneSurvival }) {
   // Generate synthetic K-M curve data based on gene statistics
   // In production, this would come from actual curve data
   const curveData = useMemo(() => {
+    if (!gene) return [];
+    
     // Create step function data for visualization
-    const highMedian = gene.high_median_surv || 50;
-    const lowMedian = gene.low_median_surv || 80;
+    const highMedian = gene.high_median_surv ?? 50;
+    const lowMedian = gene.low_median_surv ?? 80;
     const maxTime = Math.max(highMedian, lowMedian) * 1.5;
     
     const points = [];
@@ -395,29 +397,49 @@ function KaplanMeierCurve({ gene }: { gene: PerGeneSurvival }) {
     return points;
   }, [gene]);
 
+  // Guard against undefined gene
+  if (!gene) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Gene data not available
+      </div>
+    );
+  }
+  
+  // Safe formatting helpers
+  const formatPValue = (p: number | null | undefined) => {
+    if (p == null || isNaN(p)) return 'NA';
+    return p < 0.001 ? p.toExponential(2) : p.toFixed(4);
+  };
+  
+  const formatNumber = (n: number | null | undefined, decimals: number = 3) => {
+    if (n == null || isNaN(n)) return 'NA';
+    return n.toFixed(decimals);
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">Log-rank p-value</p>
-          <p className={`font-mono font-semibold ${gene.logrank_p < 0.05 ? 'text-primary' : ''}`}>
-            {gene.logrank_p < 0.001 ? gene.logrank_p.toExponential(2) : gene.logrank_p.toFixed(4)}
+          <p className={`font-mono font-semibold ${(gene.logrank_p ?? 1) < 0.05 ? 'text-primary' : ''}`}>
+            {formatPValue(gene.logrank_p)}
           </p>
         </div>
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">Hazard Ratio</p>
-          <p className="font-mono font-semibold">{gene.cox_hr.toFixed(3)}</p>
+          <p className="font-mono font-semibold">{formatNumber(gene.cox_hr)}</p>
         </div>
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">High Expr. Median Surv.</p>
           <p className="font-mono font-semibold" style={{ color: HIGH_RISK_COLOR }}>
-            {gene.high_median_surv !== null ? gene.high_median_surv.toFixed(1) : 'NA'}
+            {formatNumber(gene.high_median_surv, 1)}
           </p>
         </div>
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">Low Expr. Median Surv.</p>
           <p className="font-mono font-semibold" style={{ color: LOW_RISK_COLOR }}>
-            {gene.low_median_surv !== null ? gene.low_median_surv.toFixed(1) : 'NA'}
+            {formatNumber(gene.low_median_surv, 1)}
           </p>
         </div>
       </div>
@@ -467,12 +489,12 @@ function KaplanMeierCurve({ gene }: { gene: PerGeneSurvival }) {
         </LineChart>
       </ResponsiveContainer>
 
-      {gene.cox_p < 0.05 && (
+      {(gene.cox_p ?? 1) < 0.05 && (
         <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             <strong className="text-warning">Statistically Significant:</strong> This gene shows a significant association with survival outcomes (p &lt; 0.05).
-            {gene.cox_hr > 1
+            {(gene.cox_hr ?? 1) > 1
               ? " Higher expression is associated with increased risk (shorter survival)."
               : " Higher expression is associated with decreased risk (longer survival)."}
           </p>
@@ -484,8 +506,21 @@ function KaplanMeierCurve({ gene }: { gene: PerGeneSurvival }) {
 
 // Model-based Kaplan-Meier Curve Component
 function ModelKaplanMeierCurve({ data }: { data: ModelRiskScoreSurvival }) {
+  // Safe formatting helpers
+  const formatPValue = (p: number | null | undefined) => {
+    if (p == null || isNaN(p)) return 'NA';
+    return p < 0.001 ? p.toExponential(2) : p.toFixed(4);
+  };
+  
+  const formatNumber = (n: number | null | undefined, decimals: number = 3) => {
+    if (n == null || isNaN(n)) return 'NA';
+    return n.toFixed(decimals);
+  };
+
   // Combine high and low risk curves for plotting
   const combinedData = useMemo(() => {
+    if (!data) return [];
+    
     const highCurve = data.km_curve_high || [];
     const lowCurve = data.km_curve_low || [];
     
@@ -498,12 +533,12 @@ function ModelKaplanMeierCurve({ data }: { data: ModelRiskScoreSurvival }) {
         const lowPoint = lowCurve.find(p => p.time === time) || lowCurve.filter(p => p.time <= time).pop();
         return {
           time,
-          high: (highPoint?.surv || 1) * 100,
-          low: (lowPoint?.surv || 1) * 100,
-          high_lower: (highPoint?.lower || highPoint?.surv || 1) * 100,
-          high_upper: (highPoint?.upper || highPoint?.surv || 1) * 100,
-          low_lower: (lowPoint?.lower || lowPoint?.surv || 1) * 100,
-          low_upper: (lowPoint?.upper || lowPoint?.surv || 1) * 100,
+          high: (highPoint?.surv ?? 1) * 100,
+          low: (lowPoint?.surv ?? 1) * 100,
+          high_lower: (highPoint?.lower ?? highPoint?.surv ?? 1) * 100,
+          high_upper: (highPoint?.upper ?? highPoint?.surv ?? 1) * 100,
+          low_lower: (lowPoint?.lower ?? lowPoint?.surv ?? 1) * 100,
+          low_upper: (lowPoint?.upper ?? lowPoint?.surv ?? 1) * 100,
         };
       });
     }
@@ -525,29 +560,38 @@ function ModelKaplanMeierCurve({ data }: { data: ModelRiskScoreSurvival }) {
     return points;
   }, [data]);
 
+  // Guard against undefined data
+  if (!data || !data.stats) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Model data not available
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">Log-rank p-value</p>
-          <p className={`font-mono font-semibold ${data.stats.logrank_p < 0.05 ? 'text-primary' : ''}`}>
-            {data.stats.logrank_p < 0.001 ? data.stats.logrank_p.toExponential(2) : data.stats.logrank_p.toFixed(4)}
+          <p className={`font-mono font-semibold ${(data.stats.logrank_p ?? 1) < 0.05 ? 'text-primary' : ''}`}>
+            {formatPValue(data.stats.logrank_p)}
           </p>
         </div>
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">Cox Hazard Ratio</p>
-          <p className="font-mono font-semibold">{data.stats.cox_hr.toFixed(3)}</p>
+          <p className="font-mono font-semibold">{formatNumber(data.stats.cox_hr)}</p>
         </div>
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">95% CI</p>
           <p className="font-mono text-sm text-muted-foreground">
-            ({data.stats.cox_hr_lower.toFixed(2)} - {data.stats.cox_hr_upper.toFixed(2)})
+            ({formatNumber(data.stats.cox_hr_lower, 2)} - {formatNumber(data.stats.cox_hr_upper, 2)})
           </p>
         </div>
         <div className="bg-muted/30 rounded-lg p-3 text-center">
           <p className="text-xs text-muted-foreground">Cox p-value</p>
-          <p className={`font-mono font-semibold ${data.stats.cox_p < 0.05 ? 'text-primary' : ''}`}>
-            {data.stats.cox_p < 0.001 ? data.stats.cox_p.toExponential(2) : data.stats.cox_p.toFixed(4)}
+          <p className={`font-mono font-semibold ${(data.stats.cox_p ?? 1) < 0.05 ? 'text-primary' : ''}`}>
+            {formatPValue(data.stats.cox_p)}
           </p>
         </div>
       </div>
@@ -597,12 +641,12 @@ function ModelKaplanMeierCurve({ data }: { data: ModelRiskScoreSurvival }) {
         </LineChart>
       </ResponsiveContainer>
 
-      {data.stats.cox_p < 0.05 && (
+      {(data.stats.cox_p ?? 1) < 0.05 && (
         <div className="bg-success/10 border border-success/30 rounded-lg p-3 flex items-start gap-2">
           <Info className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
-            <strong className="text-success">Prognostic Value:</strong> The {data.model.toUpperCase()} model's risk score significantly stratifies patients by survival (p &lt; 0.05).
-            High-risk patients show {data.stats.cox_hr > 1 ? `${data.stats.cox_hr.toFixed(1)}x higher` : `${(1/data.stats.cox_hr).toFixed(1)}x lower`} hazard compared to low-risk patients.
+            <strong className="text-success">Prognostic Value:</strong> The {data.model?.toUpperCase() ?? 'MODEL'} model's risk score significantly stratifies patients by survival (p &lt; 0.05).
+            High-risk patients show {(data.stats.cox_hr ?? 1) > 1 ? `${formatNumber(data.stats.cox_hr, 1)}x higher` : `${formatNumber(data.stats.cox_hr ? 1/data.stats.cox_hr : 1, 1)}x lower`} hazard compared to low-risk patients.
           </p>
         </div>
       )}
