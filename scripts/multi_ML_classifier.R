@@ -2019,6 +2019,11 @@ run_pipeline <- function(config) {
   output_path <- file.path(config$output_dir, config$output_json)
   export_to_json(results, config, output_path)
   
+  # Save models
+  models_path <- file.path(config$output_dir, "trained_models.rds")
+  saveRDS(final_models, models_path)
+  log_message(sprintf("Models saved to: %s", models_path))
+  
   end_time <- Sys.time()
   log_message(sprintf("Pipeline completed in %.2f minutes",
                       as.numeric(difftime(end_time, start_time, units = "mins"))))
