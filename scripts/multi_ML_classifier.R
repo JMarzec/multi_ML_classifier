@@ -1906,27 +1906,42 @@ perform_survival_analysis <- function(expr_data, annotation, time_col, event_col
   
   # Validate columns exist
   if (!time_col %in% colnames(annotation)) {
-    log_message(sprintf("Time variable '%s' not found in annotation", time_col), "WARN")
+    log_message(sprintf("Time variable '%s' not found in annotation. Available columns: %s", 
+                        time_col, paste(colnames(annotation), collapse = ", ")), "WARN")
     return(NULL)
   }
   if (!event_col %in% colnames(annotation)) {
-    log_message(sprintf("Event variable '%s' not found in annotation", event_col), "WARN")
+    log_message(sprintf("Event variable '%s' not found in annotation. Available columns: %s", 
+                        event_col, paste(colnames(annotation), collapse = ", ")), "WARN")
     return(NULL)
   }
+  
+  log_message(sprintf("Time variable: '%s', Event variable: '%s'", time_col, event_col))
+  log_message(sprintf("Annotation has %d rows, expression has %d samples", nrow(annotation), nrow(expr_data)))
   
   # Extract survival data with robust numeric conversion (suppress coercion warnings)
   surv_time <- suppressWarnings(as.numeric(as.character(annotation[[time_col]])))
   surv_event <- suppressWarnings(as.numeric(as.character(annotation[[event_col]])))
   
-  # Log how many values failed conversion
-  na_time <- sum(is.na(surv_time) & !is.na(annotation[[time_col]]))
-  na_event <- sum(is.na(surv_event) & !is.na(annotation[[event_col]]))
-  if (na_time > 0 || na_event > 0) {
-    log_message(sprintf("Note: %d time and %d event values could not be converted to numeric", na_time, na_event), "INFO")
-  }
+  # Log conversion results
+  na_time_orig <- sum(is.na(annotation[[time_col]]))
+  na_event_orig <- sum(is.na(annotation[[event_col]]))
+  na_time_after <- sum(is.na(surv_time))
+  na_event_after <- sum(is.na(surv_event))
+  
+  log_message(sprintf("Time values: %d total, %d NA in original, %d NA after conversion", 
+                      length(surv_time), na_time_orig, na_time_after))
+  log_message(sprintf("Event values: %d total, %d NA in original, %d NA after conversion", 
+                      length(surv_event), na_event_orig, na_event_after))
+  
+  # Check for valid time values (must be positive)
+  positive_time <- sum(!is.na(surv_time) & surv_time > 0)
+  log_message(sprintf("Positive time values: %d", positive_time))
   
   # Remove samples with missing survival data
   valid_idx <- !is.na(surv_time) & !is.na(surv_event) & surv_time > 0
+  log_message(sprintf("Valid samples for survival analysis: %d / %d", sum(valid_idx), length(valid_idx)))
+  
   if (sum(valid_idx) < 10) {
     log_message("Insufficient samples with valid survival data (< 10)", "WARN")
     return(NULL)
