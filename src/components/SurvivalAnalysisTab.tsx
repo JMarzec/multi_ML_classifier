@@ -37,6 +37,27 @@ const MODEL_COLORS: Record<string, string> = {
 const HIGH_RISK_COLOR = "hsl(var(--destructive))";
 const LOW_RISK_COLOR = "hsl(var(--success))";
 
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function formatPValue(p: unknown): string {
+  const n = toFiniteNumber(p);
+  if (n == null) return "NA";
+  return n < 0.001 ? n.toExponential(2) : n.toFixed(4);
+}
+
+function formatNumber(n: unknown, decimals: number = 3): string {
+  const v = toFiniteNumber(n);
+  if (v == null) return "NA";
+  return v.toFixed(decimals);
+}
+
 export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -56,26 +77,48 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
     );
   }
 
-  // Sort genes by significance (Cox p-value)
+  // Normalize and sort genes by significance (Cox p-value)
   const sortedGenes = useMemo(() => {
-    if (!survivalData.per_gene) return [];
-    return [...survivalData.per_gene].sort((a, b) => a.cox_p - b.cox_p);
+    const genes = survivalData.per_gene ?? [];
+
+    const normalized = genes.map((g) => ({
+      ...g,
+      logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
+      cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
+      cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
+      cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
+      cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
+      high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
+      low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
+    }));
+
+    const pForSort = (p: number) => (Number.isFinite(p) ? p : Number.POSITIVE_INFINITY);
+    return [...normalized].sort((a, b) => pForSort(a.cox_p) - pForSort(b.cox_p));
   }, [survivalData.per_gene]);
 
-  const significantGenes = sortedGenes.filter(g => g.cox_p < 0.05);
+  const significantGenes = sortedGenes.filter((g) => Number.isFinite(g.cox_p) && g.cox_p < 0.05);
 
-  // Prepare forest plot data for top genes
+  // Prepare forest plot data (only finite values to avoid chart crashes)
   const forestPlotData = useMemo(() => {
-    return sortedGenes.slice(0, 20).map(gene => ({
-      gene: gene.gene,
-      hr: gene.cox_hr,
-      hr_lower: gene.cox_hr_lower,
-      hr_upper: gene.cox_hr_upper,
-      p_value: gene.cox_p,
-      significant: gene.cox_p < 0.05,
-      errorLower: gene.cox_hr - gene.cox_hr_lower,
-      errorUpper: gene.cox_hr_upper - gene.cox_hr,
-    }));
+    return sortedGenes
+      .filter(
+        (g) =>
+          Number.isFinite(g.cox_hr) &&
+          Number.isFinite(g.cox_hr_lower) &&
+          Number.isFinite(g.cox_hr_upper) &&
+          Number.isFinite(g.cox_p)
+      )
+      .slice(0, 20)
+      .map((gene) => ({
+        gene: gene.gene,
+        hr: gene.cox_hr,
+        hr_lower: gene.cox_hr_lower,
+        hr_upper: gene.cox_hr_upper,
+        p_value: gene.cox_p,
+        significant: gene.cox_p < 0.05,
+        errorLower: gene.cox_hr - gene.cox_hr_lower,
+        errorUpper: gene.cox_hr_upper - gene.cox_hr,
+      }));
   }, [sortedGenes]);
 
   // Model risk score survival data
@@ -148,17 +191,20 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto">
-                {sortedGenes.slice(0, 30).map(gene => (
-                  <Badge
-                    key={gene.gene}
-                    variant={selectedGene === gene.gene ? "default" : "outline"}
-                    className={`cursor-pointer ${gene.cox_p < 0.05 ? 'border-primary' : ''}`}
-                    onClick={() => setSelectedGene(gene.gene)}
-                  >
-                    {gene.gene}
-                    {gene.cox_p < 0.05 && <span className="ml-1 text-xs">*</span>}
-                  </Badge>
-                ))}
+                {sortedGenes.slice(0, 30).map((gene) => {
+                  const isSig = Number.isFinite(gene.cox_p) && gene.cox_p < 0.05;
+                  return (
+                    <Badge
+                      key={gene.gene}
+                      variant={selectedGene === gene.gene ? "default" : "outline"}
+                      className={`cursor-pointer ${isSig ? "border-primary" : ""}`}
+                      onClick={() => setSelectedGene(gene.gene)}
+                    >
+                      {gene.gene}
+                      {isSig && <span className="ml-1 text-xs">*</span>}
+                    </Badge>
+                  );
+                })}
               </div>
 
               {selectedGene && sortedGenes.find(g => g.gene === selectedGene) && (
@@ -210,9 +256,12 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis
                     type="number"
-                    domain={[0, 'auto']}
+                    domain={[0, "auto"]}
                     stroke="hsl(var(--muted-foreground))"
-                    tickFormatter={(v) => v.toFixed(1)}
+                    tickFormatter={(v) => {
+                      const n = toFiniteNumber(v);
+                      return n == null ? "" : n.toFixed(1);
+                    }}
                   />
                   <YAxis
                     type="category"
@@ -227,16 +276,15 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                       border: "1px solid hsl(var(--border))",
                       borderRadius: "8px",
                     }}
-                    formatter={(value: number, name: string) => {
-                      if (name === 'hr') return [value.toFixed(3), 'Hazard Ratio'];
-                      return [value, name];
+                    formatter={(value: unknown, name: string) => {
+                      const n = toFiniteNumber(value);
+                      if (name === "hr") return [formatNumber(n, 3), "Hazard Ratio"];
+                      return [String(value ?? ""), name];
                     }}
                     labelFormatter={(label) => {
-                      const gene = forestPlotData.find(g => g.gene === label);
-                      if (gene) {
-                        return `${label} (p=${gene.p_value.toExponential(2)})`;
-                      }
-                      return label;
+                      const entry = forestPlotData.find((g) => g.gene === label);
+                      if (entry) return `${label} (p=${formatPValue(entry.p_value)})`;
+                      return String(label ?? "");
                     }}
                   />
                   <ReferenceLine x={1} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={2} />
@@ -291,24 +339,22 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                       >
                         <td className="py-2 px-3 font-mono text-xs">{gene.gene}</td>
                         <td className="text-right py-2 px-3 font-mono text-xs">
-                          {gene.logrank_p < 0.001 ? gene.logrank_p.toExponential(2) : gene.logrank_p.toFixed(4)}
+                          {formatPValue(gene.logrank_p)}
                         </td>
                         <td className="text-right py-2 px-3 font-mono text-xs font-semibold">
-                          {gene.cox_hr.toFixed(3)}
+                          {formatNumber(gene.cox_hr, 3)}
                         </td>
                         <td className="text-right py-2 px-3 font-mono text-xs text-muted-foreground">
-                          ({gene.cox_hr_lower.toFixed(2)} - {gene.cox_hr_upper.toFixed(2)})
+                          ({formatNumber(gene.cox_hr_lower, 2)} - {formatNumber(gene.cox_hr_upper, 2)})
                         </td>
-                        <td className={`text-right py-2 px-3 font-mono text-xs ${gene.cox_p < 0.05 ? 'text-primary font-semibold' : ''}`}>
-                          {gene.cox_p < 0.001 ? gene.cox_p.toExponential(2) : gene.cox_p.toFixed(4)}
-                          {gene.cox_p < 0.05 && <span className="ml-1">*</span>}
+                        <td
+                          className={`text-right py-2 px-3 font-mono text-xs ${Number.isFinite(gene.cox_p) && gene.cox_p < 0.05 ? "text-primary font-semibold" : ""}`}
+                        >
+                          {formatPValue(gene.cox_p)}
+                          {Number.isFinite(gene.cox_p) && gene.cox_p < 0.05 && <span className="ml-1">*</span>}
                         </td>
-                        <td className="text-right py-2 px-3 font-mono text-xs">
-                          {gene.high_median_surv !== null ? gene.high_median_surv.toFixed(1) : 'NA'}
-                        </td>
-                        <td className="text-right py-2 px-3 font-mono text-xs">
-                          {gene.low_median_surv !== null ? gene.low_median_surv.toFixed(1) : 'NA'}
-                        </td>
+                        <td className="text-right py-2 px-3 font-mono text-xs">{formatNumber(gene.high_median_surv, 1)}</td>
+                        <td className="text-right py-2 px-3 font-mono text-xs">{formatNumber(gene.low_median_surv, 1)}</td>
                         <td className="text-center py-2 px-3">
                           {gene.cox_hr > 1 ? (
                             <Badge variant="destructive" className="text-xs">Risk</Badge>
