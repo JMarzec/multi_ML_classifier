@@ -760,7 +760,7 @@ compute_umap_embedding <- function(X, y, sample_ids) {
 # PROFILE RANKING WITH CLASS-SPECIFIC RISK SCORES
 # =============================================================================
 
-rank_profiles <- function(results, y, sample_ids) {
+rank_profiles <- function(results, y, sample_ids, top_percent = 10) {
   log_message("Ranking sample profiles with class-specific risk scores...")
   
   ensemble_prob <- results$soft_vote$probabilities
@@ -778,26 +778,34 @@ rank_profiles <- function(results, y, sample_ids) {
   
   # Calculate confidence and rank
   confidence <- abs(ensemble_prob - 0.5) * 2
-  rank_order <- order(ensemble_prob, decreasing = TRUE)
   
-  profiles <- lapply(1:length(ensemble_prob), function(i) {
-    list(
-      sample_index = i - 1,  # 0-indexed
-      sample_id = if (length(sample_ids) >= i) sample_ids[i] else paste0("Sample_", i),
-      actual_class = actual_class[i],
-      ensemble_probability = ensemble_prob[i],
-      predicted_class = predicted_class[i],
-      confidence = confidence[i],
-      correct = predicted_class[i] == actual_class[i],
-      rank = which(rank_order == i),
-      top_profile = which(rank_order == i) <= 10,
-      risk_score_class_0 = round(risk_score_negative[i], 2),
-      risk_score_class_1 = round(risk_score_positive[i], 2)
-    )
-  })
+  # Build data frame for consistent structure with CV script
+  ranking <- data.frame(
+    sample_index = 1:length(ensemble_prob),
+    sample_id = if (length(sample_ids) >= length(ensemble_prob)) sample_ids else paste0("Sample_", 1:length(ensemble_prob)),
+    actual_class = actual_class,
+    ensemble_probability = ensemble_prob,
+    predicted_class = predicted_class,
+    confidence = confidence,
+    correct = predicted_class == actual_class,
+    risk_score_class_0 = round(risk_score_negative, 2),
+    risk_score_class_1 = round(risk_score_positive, 2),
+    stringsAsFactors = FALSE
+  )
   
-  # Reorder by rank
-  profiles[rank_order]
+  # Order by confidence (descending) and assign ranks
+  ranking <- ranking[order(-ranking$confidence), ]
+  ranking$rank <- 1:nrow(ranking)
+  
+  # Mark top profiles
+  top_n <- ceiling(nrow(ranking) * (top_percent / 100))
+  ranking$top_profile <- ranking$rank <= top_n
+  
+  # Return consistent structure with CV script (top_profiles + all_rankings)
+  list(
+    top_profiles = ranking[ranking$top_profile, ],
+    all_rankings = ranking
+  )
 }
 
 # =============================================================================
@@ -988,8 +996,8 @@ run_pipeline <- function(config) {
     umap = compute_umap_embedding(X_dr, data$y, data$sample_ids)
   )
   
-  # Profile ranking
-  profile_ranking <- rank_profiles(results, data$y, data$sample_ids)
+  # Profile ranking (consistent structure with CV script)
+  profile_ranking <- rank_profiles(results, data$y, data$sample_ids, config$top_percent)
   
   # Build JSON output
   output <- build_json_output(data, results, feature_selection, permutation_results,
