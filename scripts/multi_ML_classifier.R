@@ -2371,10 +2371,19 @@ run_pipeline <- function(config) {
   output_path <- file.path(config$output_dir, config$output_json)
   export_to_json(results, config, output_path)
   
-  # Save models
+  # Save models with proper XGBoost serialization
+  # XGBoost models need special serialization - convert to raw bytes
+  if (!is.null(final_models$xgboost) && inherits(final_models$xgboost, "xgb.Booster")) {
+    log_message("Serializing XGBoost model using xgb.save.raw()...")
+    final_models$xgboost_raw <- xgb.save.raw(final_models$xgboost)
+    final_models$xgboost <- NULL  # Remove the pointer-based object
+    final_models$xgboost_serialized <- TRUE
+  }
+  
   models_path <- file.path(config$output_dir, "trained_models.rds")
   saveRDS(final_models, models_path)
   log_message(sprintf("Models saved to: %s", models_path))
+  log_message("NOTE: To load XGBoost model, use: models$xgboost <- xgb.load.raw(models$xgboost_raw)")
   
   end_time <- Sys.time()
   log_message(sprintf("Pipeline completed in %.2f minutes",
