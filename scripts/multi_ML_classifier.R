@@ -469,13 +469,31 @@ load_data <- function(config) {
   }
   
   # Store preprocessing stats before modifications
+  # Calculate train/test split info based on config (will be updated later with actual config)
+  n_folds <- if (!is.null(config$n_folds)) config$n_folds else 5
+  n_repeats <- if (!is.null(config$n_repeats)) config$n_repeats else 3
+  test_per_fold <- ceiling(length(sample_ids) / n_folds)
+  train_per_fold <- length(sample_ids) - test_per_fold
+  
+  # Calculate approximate class distribution per fold (stratified)
+  class_table <- table(y)
+  train_class_dist <- as.list(round(class_table * (n_folds - 1) / n_folds))
+  test_class_dist <- as.list(ceiling(class_table / n_folds))
+  
   preprocessing_stats <- list(
     original_samples = length(sample_ids),
     original_features = ncol(X),
     missing_values = sum(is.na(X)),
     missing_pct = round(sum(is.na(X)) / (nrow(X) * ncol(X)) * 100, 2),
-    class_distribution = as.list(table(y)),
-    constant_features_removed = 0
+    class_distribution = as.list(class_table),
+    constant_features_removed = 0,
+    cv_folds = n_folds,
+    cv_repeats = n_repeats,
+    train_samples_per_fold = train_per_fold,
+    test_samples_per_fold = test_per_fold,
+    train_class_distribution = train_class_dist,
+    test_class_distribution = test_class_dist,
+    full_training_mode = FALSE
   )
   
   # Ensure X is numeric
