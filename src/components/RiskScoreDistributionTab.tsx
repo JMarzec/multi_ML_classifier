@@ -148,6 +148,37 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
         </div>
       </div>
 
+      {/* Risk Score Explanation */}
+      <div className="bg-primary/5 rounded-xl border border-primary/20 p-6">
+        <h3 className="text-lg font-semibold mb-3">Understanding Risk Scores</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+          <div className="space-y-3">
+            <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
+              <h4 className="font-semibold text-primary mb-2">Negative Risk Score (Class 0)</h4>
+              <p className="text-muted-foreground">
+                Represents the model's predicted probability (0-100%) that a sample belongs to the 
+                <strong className="text-foreground"> negative/control class</strong>. A high Negative Risk score 
+                indicates the model is confident the sample does NOT have the condition or outcome of interest.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="p-4 bg-destructive/10 rounded-lg border border-destructive/20">
+              <h4 className="font-semibold text-destructive mb-2">Positive Risk Score (Class 1)</h4>
+              <p className="text-muted-foreground">
+                Represents the model's predicted probability (0-100%) that a sample belongs to the 
+                <strong className="text-foreground"> positive/case class</strong>. A high Positive Risk score 
+                indicates the model is confident the sample HAS the condition or outcome of interest.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
+          <strong>Note:</strong> For each sample, Negative Risk + Positive Risk = 100%. These scores are derived from 
+          the ensemble model's probability outputs averaged across all base learners (RF, SVM, XGBoost, KNN, MLP).
+        </div>
+      </div>
+
       {/* Clinical Interpretation */}
       <div className="bg-muted/30 rounded-xl border border-border p-6">
         <h3 className="text-lg font-semibold mb-3">Clinical Interpretation</h3>

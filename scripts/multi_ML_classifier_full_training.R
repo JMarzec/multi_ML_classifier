@@ -349,7 +349,15 @@ load_and_preprocess_data <- function(config) {
     missing_values = 0,
     missing_pct = 0,
     class_distribution = class_dist_list,
-    constant_features_removed = 0
+    constant_features_removed = 0,
+    # Full training mode - no train/test split
+    full_training_mode = TRUE,
+    cv_folds = NULL,
+    cv_repeats = NULL,
+    train_samples_per_fold = length(sample_ids),
+    test_samples_per_fold = 0,
+    train_class_distribution = class_dist_list,
+    test_class_distribution = NULL
   )
   
   return(list(
