@@ -21,7 +21,8 @@ import {
   Info,
   BoxSelect,
   Activity,
-  Filter
+  Filter,
+  Heart
 } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
@@ -47,6 +48,7 @@ import { PermutationDistributionTab } from "./PermutationDistributionTab";
 import { MLMethodInfoPanel } from "./MLMethodInfoPanel";
 import { FeatureSelectionVisualization } from "./FeatureSelectionVisualization";
 import { RiskScoreDistributionTab } from "./RiskScoreDistributionTab";
+import { SurvivalAnalysisTab } from "./SurvivalAnalysisTab";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -265,6 +267,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               <GitBranch className="w-4 h-4 mr-2" />
               CV Folds
             </TabsTrigger>
+            <TabsTrigger value="survival" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
+              <Heart className="w-4 h-4 mr-2" />
+              Survival
+            </TabsTrigger>
             <TabsTrigger value="ml-info" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <Info className="w-4 h-4 mr-2" />
               ML Guide
@@ -454,6 +460,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
 
           <TabsContent value="cv-folds">
             <CVFoldVisualizationTab data={data} />
+          </TabsContent>
+
+          <TabsContent value="survival">
+            <SurvivalAnalysisTab data={data} />
           </TabsContent>
 
           <TabsContent value="ml-info">

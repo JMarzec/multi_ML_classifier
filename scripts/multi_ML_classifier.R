@@ -44,6 +44,12 @@ suppressPackageStartupMessages({
   library(tidyr)
 })
 
+# Optional survival analysis libraries
+survival_available <- requireNamespace("survival", quietly = TRUE)
+survminer_available <- requireNamespace("survminer", quietly = TRUE)
+
+if (survival_available) library(survival)
+
 # =============================================================================
 # PARAMTERS
 # =============================================================================
@@ -107,7 +113,18 @@ option_list <- list(
   make_option(c("-p", "--n_permutations"),
               type = "integer",
               default = 100,
-              help = "Number of permutations [default: %default]")
+              help = "Number of permutations [default: %default]"),
+  
+  # Survival analysis options
+  make_option(c("--time"),
+              type = "character",
+              default = NULL,
+              help = "Time-to-event column name for survival analysis"),
+  
+  make_option(c("--event"),
+              type = "character",
+              default = NULL,
+              help = "Event/censoring column name for survival analysis (1=event, 0=censored)")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list))
@@ -178,6 +195,10 @@ config <- list(
   # Set to NULL for single dataset, or list of dataset configs for batch mode
   batch_datasets = NULL,  # Example: list(list(expr="data1.txt", annot="annot1.txt", name="Dataset1"), ...)
   
+  # Survival analysis (optional)
+  time_variable = NULL,   # Column name for time-to-event
+  event_variable = NULL,  # Column name for event status (1=event, 0=censored)
+  
   # Output
   output_dir = "./results",
   output_json = "ml_results.json"
@@ -194,6 +215,8 @@ if (!is.null(opt$seed)) config$seed <- opt$seed
 if (!is.null(opt$n_folds)) config$n_folds <- opt$n_folds
 if (!is.null(opt$n_repeats)) config$n_repeats <- opt$n_repeats
 if (!is.null(opt$n_permutations)) config$n_permutations <- opt$n_permutations
+if (!is.null(opt$time)) config$time_variable <- opt$time
+if (!is.null(opt$event)) config$event_variable <- opt$event
 
 
 # =============================================================================
@@ -1863,6 +1886,200 @@ compute_feature_boxplot_stats <- function(unscaled_expr, y, top_features, top_n 
 }
 
 # =============================================================================
+# SURVIVAL ANALYSIS FUNCTIONS
+# =============================================================================
+
+#' Perform per-gene survival analysis using Kaplan-Meier and Cox PH models
+#' @param expr_data Expression matrix (rows=samples, cols=features)
+#' @param annotation Data frame with survival data
+#' @param time_col Name of time-to-event column
+#' @param event_col Name of event status column
+#' @param features Vector of feature names to analyze
+#' @return List with per-gene survival statistics
+perform_survival_analysis <- function(expr_data, annotation, time_col, event_col, features, sample_ids) {
+  if (!survival_available) {
+    log_message("Survival analysis skipped: 'survival' package not installed", "WARN")
+    return(NULL)
+  }
+  
+  log_message("Performing survival analysis...")
+  
+  # Validate columns exist
+  if (!time_col %in% colnames(annotation)) {
+    log_message(sprintf("Time variable '%s' not found in annotation", time_col), "WARN")
+    return(NULL)
+  }
+  if (!event_col %in% colnames(annotation)) {
+    log_message(sprintf("Event variable '%s' not found in annotation", event_col), "WARN")
+    return(NULL)
+  }
+  
+  # Extract survival data
+  surv_time <- as.numeric(annotation[[time_col]])
+  surv_event <- as.numeric(annotation[[event_col]])
+  
+  # Remove samples with missing survival data
+  valid_idx <- !is.na(surv_time) & !is.na(surv_event) & surv_time > 0
+  if (sum(valid_idx) < 10) {
+    log_message("Insufficient samples with valid survival data (< 10)", "WARN")
+    return(NULL)
+  }
+  
+  per_gene_results <- list()
+  features_to_analyze <- head(features, 50)  # Limit to top 50 features
+  
+  for (i in seq_along(features_to_analyze)) {
+    feat <- features_to_analyze[i]
+    if (i %% 10 == 1) show_progress(i, length(features_to_analyze), "Survival Analysis")
+    
+    if (!feat %in% colnames(expr_data)) next
+    
+    expr_values <- expr_data[[feat]][valid_idx]
+    time_vals <- surv_time[valid_idx]
+    event_vals <- surv_event[valid_idx]
+    
+    # Median split for Kaplan-Meier
+    median_expr <- median(expr_values, na.rm = TRUE)
+    high_group <- expr_values >= median_expr
+    
+    # Skip if one group is too small
+    if (sum(high_group) < 3 || sum(!high_group) < 3) next
+    
+    tryCatch({
+      # Create survival object
+      surv_obj <- Surv(time_vals, event_vals)
+      
+      # Log-rank test
+      surv_diff <- survdiff(surv_obj ~ high_group)
+      logrank_p <- 1 - pchisq(surv_diff$chisq, df = 1)
+      
+      # Cox proportional hazards
+      cox_fit <- coxph(surv_obj ~ expr_values)
+      cox_summary <- summary(cox_fit)
+      
+      cox_hr <- as.numeric(exp(cox_fit$coefficients))
+      cox_ci <- exp(confint(cox_fit))
+      cox_p <- cox_summary$coefficients[, "Pr(>|z|)"]
+      
+      # Kaplan-Meier fits for median survival
+      km_high <- survfit(surv_obj[high_group] ~ 1)
+      km_low <- survfit(surv_obj[!high_group] ~ 1)
+      
+      # Extract median survival times
+      high_median <- if (!is.na(summary(km_high)$table["median"])) summary(km_high)$table["median"] else NA
+      low_median <- if (!is.na(summary(km_low)$table["median"])) summary(km_low)$table["median"] else NA
+      
+      per_gene_results[[feat]] <- list(
+        gene = feat,
+        logrank_p = as.numeric(logrank_p),
+        cox_hr = as.numeric(cox_hr),
+        cox_hr_lower = as.numeric(cox_ci[1]),
+        cox_hr_upper = as.numeric(cox_ci[2]),
+        cox_p = as.numeric(cox_p),
+        high_median_surv = as.numeric(high_median),
+        low_median_surv = as.numeric(low_median)
+      )
+    }, error = function(e) {
+      log_message(sprintf("Survival analysis failed for %s: %s", feat, e$message), "WARN")
+    })
+  }
+  
+  show_progress(length(features_to_analyze), length(features_to_analyze), "Survival Analysis")
+  
+  log_message(sprintf("Survival analysis completed for %d features", length(per_gene_results)))
+  
+  return(list(
+    time_variable = time_col,
+    event_variable = event_col,
+    per_gene = do.call(rbind, lapply(per_gene_results, function(x) {
+      data.frame(x, stringsAsFactors = FALSE)
+    }))
+  ))
+}
+
+#' Perform survival analysis based on model risk scores
+#' @param risk_scores Data frame with sample IDs and risk scores per model
+#' @param annotation Annotation data frame
+#' @param time_col Time-to-event column name
+#' @param event_col Event status column name
+#' @return List with model-specific survival results
+perform_model_risk_survival <- function(rankings, annotation, time_col, event_col, sample_ids) {
+  if (!survival_available) return(NULL)
+  if (is.null(rankings) || nrow(rankings) == 0) return(NULL)
+  
+  log_message("Performing model risk score survival analysis...")
+  
+  # Get survival data
+  surv_time <- as.numeric(annotation[[time_col]])
+  surv_event <- as.numeric(annotation[[event_col]])
+  
+  # Use ensemble probability as risk score
+  if (!"ensemble_probability" %in% colnames(rankings)) return(NULL)
+  
+  risk_scores <- rankings$ensemble_probability
+  
+  # Align with annotation
+  valid_idx <- !is.na(surv_time) & !is.na(surv_event) & surv_time > 0
+  if (sum(valid_idx) < 10) return(NULL)
+  
+  tryCatch({
+    time_vals <- surv_time[valid_idx]
+    event_vals <- surv_event[valid_idx]
+    risk_vals <- risk_scores[valid_idx]
+    
+    # Median split
+    high_risk <- risk_vals >= median(risk_vals, na.rm = TRUE)
+    
+    if (sum(high_risk) < 3 || sum(!high_risk) < 3) return(NULL)
+    
+    surv_obj <- Surv(time_vals, event_vals)
+    
+    # Log-rank test
+    surv_diff <- survdiff(surv_obj ~ high_risk)
+    logrank_p <- 1 - pchisq(surv_diff$chisq, df = 1)
+    
+    # Cox model
+    cox_fit <- coxph(surv_obj ~ risk_vals)
+    cox_summary <- summary(cox_fit)
+    cox_hr <- as.numeric(exp(cox_fit$coefficients))
+    cox_ci <- exp(confint(cox_fit))
+    cox_p <- cox_summary$coefficients[, "Pr(>|z|)"]
+    
+    # K-M curves for export
+    km_high <- survfit(surv_obj[high_risk] ~ 1)
+    km_low <- survfit(surv_obj[!high_risk] ~ 1)
+    
+    format_km_curve <- function(km_fit) {
+      data.frame(
+        time = km_fit$time,
+        surv = km_fit$surv,
+        lower = km_fit$lower,
+        upper = km_fit$upper,
+        n_risk = km_fit$n.risk,
+        n_event = km_fit$n.event,
+        n_censor = km_fit$n.censor
+      )
+    }
+    
+    list(
+      model = "ensemble",
+      stats = list(
+        logrank_p = as.numeric(logrank_p),
+        cox_hr = as.numeric(cox_hr),
+        cox_hr_lower = as.numeric(cox_ci[1]),
+        cox_hr_upper = as.numeric(cox_ci[2]),
+        cox_p = as.numeric(cox_p)
+      ),
+      km_curve_high = format_km_curve(km_high),
+      km_curve_low = format_km_curve(km_low)
+    )
+  }, error = function(e) {
+    log_message(sprintf("Model risk survival failed: %s", e$message), "WARN")
+    return(NULL)
+  })
+}
+
+# =============================================================================
 # JSON EXPORT
 # =============================================================================
 
@@ -1912,7 +2129,8 @@ export_to_json <- function(results, config, output_path) {
       list(top_profiles = results$ranking[results$ranking$top_profile, ],
            all_rankings = results$ranking)
     } else NULL,
-    selected_features = results$selected_features
+    selected_features = results$selected_features,
+    survival_analysis = results$survival_analysis
   )
   
   json_output <- toJSON(output, auto_unbox = TRUE, pretty = TRUE, digits = 6)
