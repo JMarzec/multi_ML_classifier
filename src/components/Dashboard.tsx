@@ -35,6 +35,8 @@ import { ConfigSummary } from "./ConfigSummary";
 import { ConfusionMatrixChart, ConfusionMatrixExplanation } from "./ConfusionMatrixChart";
 import { ROCCurveChart } from "./ROCCurveChart";
 import { ReportExport } from "./ReportExport";
+import { SurvivalReportExport } from "./SurvivalReportExport";
+import { ClinicalReportExport } from "./ClinicalReportExport";
 import { ThemeToggle } from "./ThemeToggle";
 import { DataPreprocessingTab } from "./DataPreprocessingTab";
 import { SamplePredictionTab } from "./SamplePredictionTab";
@@ -123,6 +125,8 @@ export function Dashboard({ data, onReset }: DashboardProps) {
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <ReportExport data={data} />
+              <SurvivalReportExport data={data} />
+              <ClinicalReportExport data={data} />
             </div>
           </div>
         </div>

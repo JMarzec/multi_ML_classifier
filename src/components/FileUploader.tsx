@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
-import { Upload, FileJson, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, FileJson, AlertCircle, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MLResults } from "@/types/ml-results";
+import { validateMLResultsSchema, formatValidationMessages, type ValidationResult } from "@/utils/jsonSchemaValidator";
 
 interface FileUploaderProps {
   onDataLoaded: (data: MLResults) => void;
@@ -12,11 +13,13 @@ export function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
       setSuccess(false);
+      setValidationResult(null);
 
       if (!file.name.toLowerCase().endsWith(".json")) {
         setError("Please upload a JSON file");
@@ -26,17 +29,21 @@ export function FileUploader({ onDataLoaded }: FileUploaderProps) {
       setIsLoading(true);
       try {
         const text = await file.text();
-        const data = JSON.parse(text) as MLResults;
+        const data = JSON.parse(text);
 
-        // Validate structure
-        if (!data.model_performance || !data.metadata) {
-          setError("Invalid file format. Please upload results from the R script.");
+        // Validate schema
+        const validation = validateMLResultsSchema(data);
+        setValidationResult(validation);
+
+        if (!validation.isValid) {
+          const messages = formatValidationMessages(validation);
+          setError(messages.slice(0, 3).join("\n"));
           return;
         }
 
         setSuccess(true);
         setTimeout(() => {
-          onDataLoaded(data);
+          onDataLoaded(data as MLResults);
         }, 200);
       } catch {
         setError("Failed to parse JSON file");
