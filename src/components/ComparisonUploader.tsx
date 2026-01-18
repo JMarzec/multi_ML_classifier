@@ -112,6 +112,17 @@ export function ComparisonUploader({ onFilesLoaded, currentFiles }: ComparisonUp
             type="file"
             accept=".json"
             onChange={handleChange}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragging(false);
+            }}
+            onDrop={handleDrop}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
           />
           
