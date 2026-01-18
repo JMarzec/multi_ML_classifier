@@ -77,23 +77,55 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
     );
   }
 
+  // Helper to normalize per_gene from array or object format
+  function normalizePerGene(raw: unknown): PerGeneSurvival[] {
+    if (Array.isArray(raw)) {
+      return raw
+        .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
+        .map((g) => ({
+          ...(g as any),
+          logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
+          cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
+          cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
+          cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
+          cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
+          high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
+          low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
+        })) as PerGeneSurvival[];
+    }
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      // Object keyed by gene name
+      return Object.values(raw)
+        .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
+        .map((g) => ({
+          ...(g as any),
+          logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
+          cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
+          cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
+          cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
+          cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
+          high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
+          low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
+        })) as PerGeneSurvival[];
+    }
+    return [];
+  }
+
+  // Helper to normalize model_risk_scores from array or object format
+  function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
+    if (Array.isArray(raw)) {
+      return raw.filter((m) => typeof (m as any)?.model === "string");
+    }
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      // Object keyed by model name
+      return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
+    }
+    return [];
+  }
+
   // Normalize and sort genes by significance (Cox p-value)
   const sortedGenes = useMemo(() => {
-    const genesRaw = Array.isArray(survivalData.per_gene) ? survivalData.per_gene : [];
-
-    const normalized = genesRaw
-      .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
-      .map((g) => ({
-        ...(g as any),
-        logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
-        cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
-        cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
-        cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
-        cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
-        high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
-        low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
-      })) as PerGeneSurvival[];
-
+    const normalized = normalizePerGene(survivalData.per_gene);
     const pForSort = (p: number) => (Number.isFinite(p) ? p : Number.POSITIVE_INFINITY);
     return [...normalized].sort((a, b) => pForSort(a.cox_p) - pForSort(b.cox_p));
   }, [survivalData.per_gene]);
@@ -123,10 +155,10 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
       }));
   }, [sortedGenes]);
 
-  // Model risk score survival data
-  const modelSurvivalData = Array.isArray(survivalData.model_risk_scores)
-    ? survivalData.model_risk_scores
-    : [];
+  // Model risk score survival data (handles both array and object formats)
+  const modelSurvivalData = useMemo(() => {
+    return normalizeModelRiskScores(survivalData.model_risk_scores);
+  }, [survivalData.model_risk_scores]);
 
   return (
     <div className="space-y-6">
