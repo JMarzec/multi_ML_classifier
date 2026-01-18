@@ -112,7 +112,7 @@ export function ComparisonUploader({ onFilesLoaded, currentFiles }: ComparisonUp
             type="file"
             accept=".json"
             onChange={handleChange}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
           />
           
           <div className="flex items-center justify-center gap-3 pointer-events-none">

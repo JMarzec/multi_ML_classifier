@@ -71,7 +71,7 @@ export function FileUploader({ onDataLoaded }: FileUploaderProps) {
         type="file"
         accept=".json"
         onChange={handleChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
       />
       
       <div className="flex flex-col items-center gap-4 pointer-events-none">
