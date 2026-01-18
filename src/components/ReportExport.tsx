@@ -402,7 +402,18 @@ export function ReportExport({ data }: ReportExportProps) {
           ))}
         </div>
 
-        <div className="flex gap-2">
+        {isGenerating && (
+          <div className="flex flex-col items-center justify-center py-6 space-y-3">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-muted rounded-full animate-spin border-t-primary" />
+            </div>
+            <p className="text-sm text-muted-foreground animate-pulse">
+              Generating report... This may take a moment.
+            </p>
+          </div>
+        )}
+
+        <div className={`flex gap-2 ${isGenerating ? 'opacity-50 pointer-events-none' : ''}`}>
           <Button
             onClick={() => handleExport("html")}
             disabled={isGenerating}
