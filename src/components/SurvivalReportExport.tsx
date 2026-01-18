@@ -11,6 +11,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2, Heart } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { MLResults, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
 
 interface SurvivalReportExportProps {
@@ -92,6 +93,7 @@ function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
 export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
   const [sections, setSections] = useState<ReportSections>({
     overview: true,
     kmCurves: true,
@@ -386,6 +388,11 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+
+        toast({
+          title: "Report Downloaded",
+          description: "Your survival analysis report has been downloaded successfully.",
+        });
       } else {
         const printWindow = window.open("", "_blank");
         if (printWindow) {
@@ -395,12 +402,22 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
           setTimeout(() => {
             printWindow.print();
           }, 500);
+
+          toast({
+            title: "Print Dialog Opened",
+            description: "Use the print dialog to save as PDF.",
+          });
         }
       }
 
       setIsOpen(false);
     } catch (error) {
       console.error("Error generating survival report:", error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error generating your report. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
     }

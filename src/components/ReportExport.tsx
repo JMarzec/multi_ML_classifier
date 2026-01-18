@@ -11,7 +11,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2 } from "lucide-react";
-import type { MLResults } from "@/types/ml-results";
+import { useToast } from "@/hooks/use-toast";
+import type { MLResults, PermutationMetric } from "@/types/ml-results";
 
 interface ReportExportProps {
   data: MLResults;
@@ -29,6 +30,7 @@ interface ReportSections {
 export function ReportExport({ data }: ReportExportProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
   const [sections, setSections] = useState<ReportSections>({
     summary: true,
     modelPerformance: true,
@@ -37,6 +39,32 @@ export function ReportExport({ data }: ReportExportProps) {
     profileRanking: true,
     configuration: true,
   });
+
+  // Helper for safe number access
+  const toFiniteNumber = (value: unknown): number | undefined => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return undefined;
+  };
+
+  const isValidMetric = (metric: unknown): metric is PermutationMetric => {
+    if (!metric || typeof metric !== 'object') return false;
+    const m = metric as any;
+    return toFiniteNumber(m.original) !== undefined;
+  };
+
+  const formatPercent = (val: unknown): string => {
+    const n = toFiniteNumber(val);
+    return n !== undefined ? (n * 100).toFixed(2) + "%" : "N/A";
+  };
+
+  const formatPValue = (val: unknown): string => {
+    const n = toFiniteNumber(val);
+    return n !== undefined ? n.toFixed(4) : "N/A";
+  };
 
   const modelLabels: Record<string, string> = {
     rf: "Random Forest",
@@ -205,7 +233,14 @@ export function ReportExport({ data }: ReportExportProps) {
     // Permutation Testing Section
     if (sections.permutationTesting && data.permutation_testing) {
       const perm = data.permutation_testing;
-      html += `
+      const hasOOB = isValidMetric(perm.rf_oob_error);
+      const hasAUROC = isValidMetric(perm.rf_auroc);
+
+      if (hasOOB || hasAUROC) {
+        const oobPValue = hasOOB ? toFiniteNumber(perm.rf_oob_error.p_value) : undefined;
+        const aurocPValue = hasAUROC ? toFiniteNumber(perm.rf_auroc.p_value) : undefined;
+
+        html += `
     <section class="section">
       <h2>Permutation Testing Results</h2>
       <p style="margin-bottom: 1rem; color: #6b7280;">
@@ -223,26 +258,39 @@ export function ReportExport({ data }: ReportExportProps) {
           </tr>
         </thead>
         <tbody>
+`;
+        if (hasOOB) {
+          const isSignificant = oobPValue !== undefined && oobPValue < 0.05;
+          html += `
           <tr>
             <td>RF OOB Error</td>
-            <td class="mono">${(perm.rf_oob_error.original * 100).toFixed(2)}%</td>
-            <td class="mono">${(perm.rf_oob_error.permuted_mean * 100).toFixed(2)}%</td>
-            <td class="mono">±${(perm.rf_oob_error.permuted_sd * 100).toFixed(2)}%</td>
-            <td class="mono ${perm.rf_oob_error.p_value < 0.05 ? 'highlight' : 'warning'}">${perm.rf_oob_error.p_value.toFixed(4)}</td>
-            <td><span class="badge ${perm.rf_oob_error.p_value < 0.05 ? 'badge-success' : 'badge-info'}">${perm.rf_oob_error.p_value < 0.05 ? 'Significant' : 'Not Significant'}</span></td>
+            <td class="mono">${formatPercent(perm.rf_oob_error.original)}</td>
+            <td class="mono">${formatPercent(perm.rf_oob_error.permuted_mean)}</td>
+            <td class="mono">±${formatPercent(perm.rf_oob_error.permuted_sd)}</td>
+            <td class="mono ${isSignificant ? 'highlight' : 'warning'}">${formatPValue(oobPValue)}</td>
+            <td><span class="badge ${isSignificant ? 'badge-success' : 'badge-info'}">${isSignificant ? 'Significant' : 'Not Significant'}</span></td>
           </tr>
+`;
+        }
+        if (hasAUROC) {
+          const isSignificant = aurocPValue !== undefined && aurocPValue < 0.05;
+          html += `
           <tr>
             <td>RF AUROC</td>
-            <td class="mono">${(perm.rf_auroc.original * 100).toFixed(2)}%</td>
-            <td class="mono">${(perm.rf_auroc.permuted_mean * 100).toFixed(2)}%</td>
-            <td class="mono">±${(perm.rf_auroc.permuted_sd * 100).toFixed(2)}%</td>
-            <td class="mono ${perm.rf_auroc.p_value < 0.05 ? 'highlight' : 'warning'}">${perm.rf_auroc.p_value.toFixed(4)}</td>
-            <td><span class="badge ${perm.rf_auroc.p_value < 0.05 ? 'badge-success' : 'badge-info'}">${perm.rf_auroc.p_value < 0.05 ? 'Significant' : 'Not Significant'}</span></td>
+            <td class="mono">${formatPercent(perm.rf_auroc.original)}</td>
+            <td class="mono">${formatPercent(perm.rf_auroc.permuted_mean)}</td>
+            <td class="mono">±${formatPercent(perm.rf_auroc.permuted_sd)}</td>
+            <td class="mono ${isSignificant ? 'highlight' : 'warning'}">${formatPValue(aurocPValue)}</td>
+            <td><span class="badge ${isSignificant ? 'badge-success' : 'badge-info'}">${isSignificant ? 'Significant' : 'Not Significant'}</span></td>
           </tr>
+`;
+        }
+        html += `
         </tbody>
       </table>
     </section>
 `;
+      }
     }
 
     // Profile Ranking Section
@@ -348,6 +396,11 @@ export function ReportExport({ data }: ReportExportProps) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Report Downloaded",
+          description: "Your analysis report has been downloaded successfully.",
+        });
       } else {
         // For PDF, open in new window for printing
         const printWindow = window.open("", "_blank");
@@ -358,12 +411,22 @@ export function ReportExport({ data }: ReportExportProps) {
           setTimeout(() => {
             printWindow.print();
           }, 500);
+          
+          toast({
+            title: "Print Dialog Opened",
+            description: "Use the print dialog to save as PDF.",
+          });
         }
       }
       
       setIsOpen(false);
     } catch (error) {
       console.error("Error generating report:", error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error generating your report. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
     }
