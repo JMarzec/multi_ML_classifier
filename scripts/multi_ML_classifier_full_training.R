@@ -232,11 +232,22 @@ load_and_preprocess_data <- function(config) {
   # Filter and align data
   expr_mat <- expr_mat[, colnames(expr_mat) %in% common_samples, drop = FALSE]
   annot <- annot[annot[[annot_sample_col]] %in% common_samples, ]
-  sample_ids <- colnames(expr_mat)
   
-  # Sort to ensure alignment
+  # Sort BOTH to ensure alignment, then update sample_ids AFTER sorting
   expr_mat <- expr_mat[, order(colnames(expr_mat)), drop = FALSE]
   annot <- annot[order(annot[[annot_sample_col]]), ]
+  
+  # Update sample_ids AFTER sorting to match the sorted order
+  sample_ids <- colnames(expr_mat)
+  
+  # Verify alignment before extracting target
+  if (!identical(sample_ids, annot[[annot_sample_col]])) {
+    log_message("WARNING: Sample order mismatch detected, re-aligning...", "WARN")
+    # Force exact alignment: reorder annot to match expr_mat column order
+    annot <- annot[match(sample_ids, annot[[annot_sample_col]]), ]
+  }
+  
+  log_message(sprintf("Sample alignment verified: %d samples", length(sample_ids)))
   
   # Extract target variable
   y <- factor(annot[[config$target_variable]])

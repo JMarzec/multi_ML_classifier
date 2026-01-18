@@ -9,9 +9,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProfileRanking } from "@/types/ml-results";
-import { Search, ArrowUpDown, CheckCircle2, XCircle } from "lucide-react";
+import { Search, ArrowUpDown, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 interface ProfileRankingTableProps {
   rankings: ProfileRanking[];
@@ -23,10 +24,13 @@ const CLASS_NAMES: Record<string, string> = {
   "1": "Positive",
 };
 
+const PAGE_SIZE = 50;
+
 export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTableProps) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<keyof ProfileRanking>("rank");
   const [sortAsc, setSortAsc] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredAndSorted = useMemo(() => {
     let data = [...rankings];
@@ -56,6 +60,17 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
     return data;
   }, [rankings, search, sortField, sortAsc]);
 
+  // Reset page when search changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filteredAndSorted.length / PAGE_SIZE);
+  const paginatedData = filteredAndSorted.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   const handleSort = (field: keyof ProfileRanking) => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
@@ -63,6 +78,7 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
       setSortField(field);
       setSortAsc(true);
     }
+    setCurrentPage(1);
   };
 
   const stats = useMemo(() => {
@@ -92,7 +108,8 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
           <div>
             <h3 className="text-lg font-semibold">Profile Rankings</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Top {topPercent}% profiles ({stats.topCount} samples) based on prediction confidence
+              All {rankings.length} samples ranked by prediction confidence 
+              <span className="text-primary"> (Top {topPercent}%: {stats.topCount} samples)</span>
             </p>
           </div>
           
@@ -163,7 +180,7 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSorted.slice(0, 100).map((row) => (
+            {paginatedData.map((row) => (
               <TableRow 
                 key={row.sample_id || row.sample_index}
                 className={cn(
@@ -246,12 +263,57 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
             ))}
           </TableBody>
         </Table>
-        {filteredAndSorted.length > 100 && (
-          <div className="p-4 text-center text-sm text-muted-foreground border-t border-border">
-            Showing first 100 of {filteredAndSorted.length} samples
-          </div>
-        )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between p-4 border-t border-border">
+          <p className="text-sm text-muted-foreground">
+            Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredAndSorted.length)} of {filteredAndSorted.length} samples
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-3 text-sm">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
