@@ -79,18 +79,20 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
 
   // Normalize and sort genes by significance (Cox p-value)
   const sortedGenes = useMemo(() => {
-    const genes = survivalData.per_gene ?? [];
+    const genesRaw = Array.isArray(survivalData.per_gene) ? survivalData.per_gene : [];
 
-    const normalized = genes.map((g) => ({
-      ...g,
-      logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
-      cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
-      cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
-      cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
-      cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
-      high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
-      low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
-    }));
+    const normalized = genesRaw
+      .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
+      .map((g) => ({
+        ...(g as any),
+        logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
+        cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
+        cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
+        cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
+        cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
+        high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
+        low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
+      })) as PerGeneSurvival[];
 
     const pForSort = (p: number) => (Number.isFinite(p) ? p : Number.POSITIVE_INFINITY);
     return [...normalized].sort((a, b) => pForSort(a.cox_p) - pForSort(b.cox_p));
@@ -122,7 +124,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
   }, [sortedGenes]);
 
   // Model risk score survival data
-  const modelSurvivalData = survivalData.model_risk_scores || [];
+  const modelSurvivalData = Array.isArray(survivalData.model_risk_scores)
+    ? survivalData.model_risk_scores
+    : [];
 
   return (
     <div className="space-y-6">
@@ -384,17 +388,21 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                 </p>
 
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {modelSurvivalData.map(m => (
-                    <Badge
-                      key={m.model}
-                      variant={selectedModel === m.model ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedModel(m.model)}
-                    >
-                      {m.model.toUpperCase()}
-                      {m.stats.cox_p < 0.05 && <span className="ml-1">*</span>}
-                    </Badge>
-                  ))}
+                  {modelSurvivalData.map((m) => {
+                    const modelName = String((m as any)?.model ?? "");
+                    const coxP = toFiniteNumber((m as any)?.stats?.cox_p);
+                    return (
+                      <Badge
+                        key={modelName || Math.random().toString(16).slice(2)}
+                        variant={selectedModel === modelName ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => setSelectedModel(modelName)}
+                      >
+                        {(modelName || "MODEL").toUpperCase()}
+                        {coxP != null && coxP < 0.05 && <span className="ml-1">*</span>}
+                      </Badge>
+                    );
+                  })}
                 </div>
 
                 {selectedModel && modelSurvivalData.find(m => m.model === selectedModel) && (

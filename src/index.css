@@ -4,26 +4,27 @@
 
 @layer base {
   :root {
-    /* Light theme - scientific/clinical */
+    /* Light theme - AccelBio */
     --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    --foreground: 226 35% 16%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 226 35% 16%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 226 35% 16%;
 
-    --primary: 199 89% 48%;
+    /* Brand palette sampled from Fundo.png (lime → teal → navy) */
+    --primary: 174 78% 32%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 262 83% 58%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 78 88% 48%;
+    --secondary-foreground: 226 35% 16%;
 
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 142 71% 45%;
+    --accent: 226 45% 20%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -31,36 +32,39 @@
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 199 89% 48%;
+    --ring: 174 78% 32%;
 
     --radius: 0.75rem;
 
-    --success: 142 71% 45%;
+    --success: 174 78% 32%;
     --warning: 38 92% 50%;
-    --info: 199 89% 48%;
-    
-    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(262 83% 58%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
-    --gradient-glow: radial-gradient(ellipse at center, hsl(199 89% 48% / 0.1) 0%, transparent 70%);
-    
-    --shadow-glow: 0 0 40px hsl(199 89% 48% / 0.15);
-    --shadow-card: 0 4px 24px hsl(222 47% 11% / 0.08);
+    --info: 204 82% 40%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(78 88% 48%) 0%, hsl(174 78% 32%) 45%, hsl(226 45% 20%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100% / 0.92) 0%, hsl(210 40% 98% / 0.92) 100%);
+    --gradient-glow: radial-gradient(ellipse at center, hsl(174 78% 32% / 0.14) 0%, transparent 70%);
+    --gradient-page: radial-gradient(1200px 600px at 15% 10%, hsl(78 88% 48% / 0.35), transparent 55%),
+      radial-gradient(900px 500px at 20% 65%, hsl(174 78% 32% / 0.35), transparent 60%),
+      radial-gradient(1100px 700px at 90% 40%, hsl(226 45% 20% / 0.35), transparent 60%);
+
+    --shadow-glow: 0 0 40px hsl(174 78% 32% / 0.18);
+    --shadow-card: 0 4px 24px hsl(226 35% 16% / 0.08);
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 199 89% 48%;
+    --sidebar-foreground: 226 35% 16%;
+    --sidebar-primary: 174 78% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-accent-foreground: 226 35% 16%;
     --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-ring: 174 78% 32%;
 
-    --chart-rf: 142 71% 45%;
-    --chart-svm: 262 83% 58%;
-    --chart-xgb: 38 92% 50%;
-    --chart-knn: 199 89% 48%;
-    --chart-mlp: 340 82% 52%;
-    --chart-ensemble: 172 66% 50%;
+    --chart-rf: 174 78% 32%;
+    --chart-svm: 226 45% 20%;
+    --chart-xgb: 78 88% 48%;
+    --chart-knn: 204 82% 40%;
+    --chart-mlp: 292 60% 50%;
+    --chart-ensemble: 170 66% 40%;
   }
 
   .dark {
@@ -117,6 +121,8 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    background-image: var(--gradient-page);
+    background-attachment: fixed;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 

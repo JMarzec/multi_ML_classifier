@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { 
-  BarChart3, 
-  Brain, 
-  Shuffle, 
-  Users, 
-  Settings, 
+import {
+  BarChart3,
+  Brain,
+  Shuffle,
+  Users,
+  Settings,
   ArrowLeft,
   Grid3X3,
   TrendingUp,
@@ -22,8 +22,9 @@ import {
   BoxSelect,
   Activity,
   Filter,
-  Heart
+  Heart,
 } from "lucide-react";
+import accelBioLogo from "@/assets/accelbio-logo.png";
 import { MetricCard } from "./MetricCard";
 import { ModelComparisonChart } from "./ModelComparisonChart";
 import { FeatureImportanceChart } from "./FeatureImportanceChart";
@@ -58,17 +59,17 @@ interface DashboardProps {
 
 export function Dashboard({ data, onReset }: DashboardProps) {
   const [metricFilter, setMetricFilter] = useState<"accuracy" | "auroc" | "f1_score" | "balanced_accuracy">("auroc");
-  
+
   // Compute effective ensemble accuracy using soft-vote fallback logic
   // If hard_vote accuracy is 0 or NaN but soft_vote is valid, prefer soft_vote
   const effectiveEnsembleStats = useMemo(() => {
     const softVote = data.model_performance.soft_vote;
     const hardVote = data.model_performance.hard_vote;
-    
+
     // Check if soft_vote accuracy is valid
     const softAcc = softVote?.accuracy?.mean;
     const hardAcc = hardVote?.accuracy?.mean;
-    
+
     // Prefer soft_vote if hard_vote is missing/zero
     if (softAcc && softAcc > 0) {
       return { stats: softVote.accuracy!, label: "Ensemble Accuracy (Soft)" };
@@ -77,11 +78,9 @@ export function Dashboard({ data, onReset }: DashboardProps) {
       return { stats: hardVote!.accuracy!, label: "Ensemble Accuracy (Hard)" };
     }
     // Fallback to soft_vote even if 0 (display placeholder)
-    return softVote?.accuracy 
-      ? { stats: softVote.accuracy, label: "Ensemble Accuracy" }
-      : null;
+    return softVote?.accuracy ? { stats: softVote.accuracy, label: "Ensemble Accuracy" } : null;
   }, [data.model_performance]);
-  
+
   const bestModel = Object.entries(data.model_performance)
     .filter(([, metrics]) => metrics?.auroc && metrics.auroc.mean > 0)
     .sort((a, b) => (b[1]!.auroc!.mean || 0) - (a[1]!.auroc!.mean || 0))[0];
@@ -98,21 +97,29 @@ export function Dashboard({ data, onReset }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+      <header className="sticky top-0 z-50 bg-background/70 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={onReset}>
+              <Button variant="ghost" size="icon" onClick={onReset} aria-label="Back">
                 <ArrowLeft className="w-5 h-5" />
               </Button>
-              <div>
-                <h1 className="text-xl font-bold gradient-text">ML Classifier Results</h1>
-                <p className="text-sm text-muted-foreground">
-                  Generated {new Date(data.metadata.generated_at).toLocaleDateString()}
-                </p>
+
+              <div className="flex items-center gap-3">
+                <img
+                  src={accelBioLogo}
+                  alt="Co-Lab AccelBio logo"
+                  className="h-9 w-auto"
+                />
+                <div>
+                  <h1 className="text-xl font-bold gradient-text">ML Classifier Results</h1>
+                  <p className="text-sm text-muted-foreground">
+                    Generated {new Date(data.metadata.generated_at).toLocaleDateString()}
+                  </p>
+                </div>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <ReportExport data={data} />
@@ -120,6 +127,7 @@ export function Dashboard({ data, onReset }: DashboardProps) {
           </div>
         </div>
       </header>
+
 
       <main className="container mx-auto px-4 py-8 space-y-8">
         {/* Summary Cards */}

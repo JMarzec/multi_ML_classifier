@@ -7,6 +7,7 @@ import { ComparisonUploader } from "@/components/ComparisonUploader";
 import { ComparisonDashboard } from "@/components/ComparisonDashboard";
 import { DemoDataDownload } from "@/components/DemoDataDownload";
 import { Brain, Download, Github, FileCode2, Sparkles, Play, GitCompare } from "lucide-react";
+import accelBioLogo from "@/assets/accelbio-logo.png";
 import type { MLResults } from "@/types/ml-results";
 import { demoData } from "@/data/demoData";
 
@@ -24,16 +25,19 @@ const Index = () => {
   if (viewMode === "comparison" && comparisonFiles.length === 2) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+        <header className="sticky top-0 z-50 bg-background/70 backdrop-blur-lg border-b border-border">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" onClick={() => { setComparisonFiles([]); setViewMode("landing"); }}>
                   ← Back
                 </Button>
-                <div>
-                  <h1 className="text-xl font-bold gradient-text">Side-by-Side Comparison</h1>
-                  <p className="text-sm text-muted-foreground">Comparing two analysis runs</p>
+                <div className="flex items-center gap-3">
+                  <img src={accelBioLogo} alt="Co-Lab AccelBio logo" className="h-9 w-auto" />
+                  <div>
+                    <h1 className="text-xl font-bold gradient-text">Side-by-Side Comparison</h1>
+                    <p className="text-sm text-muted-foreground">Comparing two analysis runs</p>
+                  </div>
                 </div>
               </div>
               <ThemeToggle />
@@ -49,6 +53,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
+      <div className="absolute top-4 left-4 z-20">
+        <img src={accelBioLogo} alt="Co-Lab AccelBio logo" className="h-10 w-auto" />
+      </div>
+
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
