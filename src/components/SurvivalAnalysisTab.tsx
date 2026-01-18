@@ -64,7 +64,13 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
 
   const survivalData = data.survival_analysis;
 
-  if (!survivalData) {
+  // Check for null, undefined, or empty object
+  const hasValidSurvivalData = survivalData && 
+    typeof survivalData === 'object' && 
+    Object.keys(survivalData).length > 0 &&
+    (survivalData.per_gene || survivalData.model_risk_scores);
+
+  if (!hasValidSurvivalData) {
     return (
       <div className="bg-card rounded-xl p-12 border border-border text-center">
         <Heart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />

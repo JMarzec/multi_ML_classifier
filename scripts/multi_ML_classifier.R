@@ -617,7 +617,9 @@ load_data <- function(config) {
     y = y,
     sample_ids = sample_ids,
     feature_names = colnames(X),
-    preprocessing_stats = preprocessing_stats
+    preprocessing_stats = preprocessing_stats,
+    annotation = annotation,
+    annot_sample_col = annot_sample_col
   ))
 }
 
@@ -2102,6 +2104,70 @@ perform_model_risk_survival <- function(rankings, annotation, time_col, event_co
 }
 
 # =============================================================================
+# UNIFIED SURVIVAL ANALYSIS RUNNER
+# =============================================================================
+
+#' Run complete survival analysis (per-gene and model-based)
+#' @param X Expression data (samples x features)
+#' @param y Target variable
+#' @param sample_ids Sample IDs
+#' @param ranking Profile ranking data frame
+#' @param config Configuration list
+#' @param annotation Annotation data frame
+#' @param annot_sample_col Sample ID column name in annotation
+#' @param selected_features Selected feature names
+#' @return List with survival analysis results or NULL
+run_survival_analysis <- function(X, y, sample_ids, ranking, config, annotation, annot_sample_col, selected_features) {
+  if (!survival_available) {
+    log_message("Survival package not available, skipping survival analysis", "WARN")
+    return(NULL)
+  }
+  
+  if (is.null(config$time_variable) || is.null(config$event_variable) ||
+      config$time_variable == "" || config$event_variable == "") {
+    log_message("No time/event variables specified, skipping survival analysis", "INFO")
+    return(NULL)
+  }
+  
+  log_message(paste(rep("=", 60), collapse = ""))
+  log_message("SURVIVAL ANALYSIS")
+  
+  # Per-gene survival analysis
+  per_gene <- perform_survival_analysis(
+    expr_data = X,
+    annotation = annotation,
+    time_col = config$time_variable,
+    event_col = config$event_variable,
+    features = selected_features,
+    sample_ids = sample_ids
+  )
+  
+  # Model risk score survival analysis
+  model_risk <- perform_model_risk_survival(
+    rankings = ranking,
+    annotation = annotation,
+    time_col = config$time_variable,
+    event_col = config$event_variable,
+    sample_ids = sample_ids
+  )
+  
+  if (is.null(per_gene) && is.null(model_risk)) {
+    log_message("No survival analysis results generated", "WARN")
+    return(NULL)
+  }
+  
+  result <- list(
+    time_variable = config$time_variable,
+    event_variable = config$event_variable,
+    per_gene = if (!is.null(per_gene)) per_gene$per_gene else NULL,
+    model_risk_scores = if (!is.null(model_risk)) list(model_risk) else NULL
+  )
+  
+  log_message("Survival analysis completed")
+  return(result)
+}
+
+# =============================================================================
 # JSON EXPORT
 # =============================================================================
 
@@ -2345,6 +2411,18 @@ run_pipeline <- function(config) {
   }
   feature_boxplot_stats <- compute_feature_boxplot_stats(data$X_raw, data$y, top_feature_names, top_n = 20)
   
+  # Survival analysis (if time/event variables provided)
+  survival_analysis <- run_survival_analysis(
+    X = data$X_raw[, selected_features, drop = FALSE],
+    y = data$y,
+    sample_ids = data$sample_ids,
+    ranking = ranking,
+    config = config,
+    annotation = data$annotation,
+    annot_sample_col = data$annot_sample_col,
+    selected_features = selected_features
+  )
+  
   # Export results
   results <- list(
     cv_summary = cv_summary,
@@ -2359,7 +2437,8 @@ run_pipeline <- function(config) {
     ranking = ranking,
     selected_features = selected_features,
     preprocessing_stats = data$preprocessing_stats,
-    dataset_name = basename(config$expression_matrix_file)
+    dataset_name = basename(config$expression_matrix_file),
+    survival_analysis = survival_analysis
   )
   
   results$final_prediction_strategy <- list(
