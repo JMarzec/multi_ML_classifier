@@ -1,20 +1,59 @@
-import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PermutationTesting } from "@/types/ml-results";
+import type { PermutationTesting, PermutationMetric } from "@/types/ml-results";
 
 interface PermutationTestingPanelProps {
-  permutation: PermutationTesting;
+  permutation: PermutationTesting | null | undefined;
 }
 
+// Safe number conversion
+const toFiniteNumber = (val: unknown, fallback = 0): number => {
+  if (val === null || val === undefined) return fallback;
+  const num = typeof val === 'number' ? val : Number(val);
+  return Number.isFinite(num) ? num : fallback;
+};
+
+// Check if a metric object is valid
+const isValidMetric = (metric: unknown): metric is PermutationMetric => {
+  if (!metric || typeof metric !== 'object') return false;
+  const m = metric as Record<string, unknown>;
+  return 'original' in m && 'permuted_mean' in m && 'permuted_sd' in m && 'p_value' in m;
+};
+
 export function PermutationTestingPanel({ permutation }: PermutationTestingPanelProps) {
+  // Early return if no permutation data
+  if (!permutation) {
+    return (
+      <div className="bg-card rounded-xl p-6 border border-border">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <AlertCircle className="w-5 h-5" />
+          <p>No permutation testing data available.</p>
+        </div>
+      </div>
+    );
+  }
+
   const renderMetric = (
     label: string,
-    original: number,
-    permutedMean: number,
-    permutedSd: number,
-    pValue: number,
+    metric: PermutationMetric | null | undefined,
     higherIsBetter: boolean = true
   ) => {
+    if (!isValidMetric(metric)) {
+      return (
+        <div className="bg-muted/50 rounded-lg p-5 border border-border">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <AlertCircle className="w-4 h-4" />
+            <span>{label}: Data not available</span>
+          </div>
+        </div>
+      );
+    }
+
+    const original = toFiniteNumber(metric.original);
+    const permutedMean = toFiniteNumber(metric.permuted_mean);
+    const permutedSd = toFiniteNumber(metric.permuted_sd);
+    const pValue = toFiniteNumber(metric.p_value, 1);
+
     const isSignificant = pValue < 0.05;
     const isTrending = pValue < 0.1;
     const direction = higherIsBetter 
@@ -55,7 +94,7 @@ export function PermutationTestingPanel({ permutation }: PermutationTestingPanel
           <div>
             <p className="text-xs text-muted-foreground mb-1">Original Model</p>
             <p className="text-xl font-bold text-primary">
-              {(original * (label.includes("AUROC") ? 100 : 100)).toFixed(1)}%
+              {(original * 100).toFixed(1)}%
             </p>
           </div>
           <div>
@@ -89,6 +128,19 @@ export function PermutationTestingPanel({ permutation }: PermutationTestingPanel
     );
   };
 
+  const hasAnyMetric = isValidMetric(permutation.rf_oob_error) || isValidMetric(permutation.rf_auroc);
+
+  if (!hasAnyMetric) {
+    return (
+      <div className="bg-card rounded-xl p-6 border border-border">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <AlertCircle className="w-5 h-5" />
+          <p>Permutation testing data is incomplete or malformed.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card rounded-xl p-6 border border-border">
       <div className="mb-6">
@@ -100,23 +152,8 @@ export function PermutationTestingPanel({ permutation }: PermutationTestingPanel
       </div>
 
       <div className="space-y-4">
-        {renderMetric(
-          "Random Forest OOB Error",
-          permutation.rf_oob_error.original,
-          permutation.rf_oob_error.permuted_mean,
-          permutation.rf_oob_error.permuted_sd,
-          permutation.rf_oob_error.p_value,
-          false // Lower OOB error is better
-        )}
-
-        {renderMetric(
-          "Random Forest AUROC",
-          permutation.rf_auroc.original,
-          permutation.rf_auroc.permuted_mean,
-          permutation.rf_auroc.permuted_sd,
-          permutation.rf_auroc.p_value,
-          true // Higher AUROC is better
-        )}
+        {renderMetric("Random Forest OOB Error", permutation.rf_oob_error, false)}
+        {renderMetric("Random Forest AUROC", permutation.rf_auroc, true)}
       </div>
 
       <div className="mt-6 p-4 bg-info/10 rounded-lg border border-info/20">
