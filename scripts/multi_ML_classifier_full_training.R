@@ -1015,26 +1015,51 @@ run_survival_analysis <- function(X, y, sample_ids, results, config, annot, anno
   # Model-based risk score survival (using ensemble probabilities)
   model_risk_results <- list()
   
+  # Log sample count alignment for debugging
+  log_message(sprintf("Model risk survival: valid_idx has %d TRUE values out of %d samples", 
+                      sum(valid_idx), length(valid_idx)))
+  
   for (model_name in c("rf", "svm", "xgboost", "soft_vote")) {
     if (is.null(results[[model_name]])) next
     
     tryCatch({
       probs <- results[[model_name]]$probabilities
-      if (length(probs) != length(valid_idx)) {
-        log_message(sprintf("Probability length mismatch for %s", model_name), "WARN")
+      
+      # Verify length matches sample_ids (probabilities should be in sample_ids order)
+      if (length(probs) != length(sample_ids)) {
+        log_message(sprintf("Probability length (%d) != sample_ids length (%d) for %s", 
+                            length(probs), length(sample_ids), model_name), "WARN")
         next
       }
       
+      # Apply same valid_idx to get probabilities for samples with valid survival data
       probs_valid <- probs[valid_idx]
+      
+      log_message(sprintf("Model %s: %d valid samples, prob range: %.3f - %.3f", 
+                          model_name, length(probs_valid), min(probs_valid, na.rm=TRUE), max(probs_valid, na.rm=TRUE)))
+      
       median_prob <- median(probs_valid, na.rm = TRUE)
       risk_group <- ifelse(probs_valid > median_prob, "High", "Low")
+      
+      # Log group sizes for debugging significance issues
+      n_high <- sum(risk_group == "High", na.rm = TRUE)
+      n_low <- sum(risk_group == "Low", na.rm = TRUE)
+      log_message(sprintf("Model %s risk groups: High=%d, Low=%d (median cutoff=%.3f)", 
+                          model_name, n_high, n_low, median_prob))
       risk_group <- factor(risk_group, levels = c("Low", "High"))
+      
+      # Log event distribution across risk groups for debugging
+      events_high <- sum(event_valid[risk_group == "High"], na.rm = TRUE)
+      events_low <- sum(event_valid[risk_group == "Low"], na.rm = TRUE)
+      log_message(sprintf("Model %s events: High=%d/%d, Low=%d/%d", 
+                          model_name, events_high, n_high, events_low, n_low))
       
       surv_obj <- Surv(time_valid, event_valid)
       
       # Log-rank test
       logrank <- survdiff(surv_obj ~ risk_group)
       logrank_p <- 1 - pchisq(logrank$chisq, df = 1)
+      log_message(sprintf("Model %s: Log-rank chi-sq=%.3f, p=%.4e", model_name, logrank$chisq, logrank_p))
       
       # Cox model
       cox_fit <- coxph(surv_obj ~ probs_valid)

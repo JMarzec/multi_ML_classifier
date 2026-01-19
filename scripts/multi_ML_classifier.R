@@ -2033,17 +2033,48 @@ perform_model_risk_survival <- function(rankings, annotation, time_col, event_co
   
   log_message("Performing model risk score survival analysis...")
   
-  # Get survival data
-  surv_time <- as.numeric(annotation[[time_col]])
-  surv_event <- as.numeric(annotation[[event_col]])
-  
-  # Use ensemble probability as risk score
+  # Use ensemble probability as risk score - MUST align by sample_id
   if (!"ensemble_probability" %in% colnames(rankings)) return(NULL)
+  if (!"sample_id" %in% colnames(rankings)) {
+    log_message("Rankings missing sample_id column, cannot align with survival data", "WARN")
+    return(NULL)
+  }
   
-  risk_scores <- rankings$ensemble_probability
+  # Match rankings to annotation by sample_id
+  # First, find the sample ID column in annotation
+  annot_sample_col <- NULL
+  for (col in c("sample_id", "Sample_ID", "SampleID", "sample", "Sample")) {
+    if (col %in% colnames(annotation)) {
+      annot_sample_col <- col
+      break
+    }
+  }
+  if (is.null(annot_sample_col)) {
+    # Use first column as sample ID
+    annot_sample_col <- colnames(annotation)[1]
+  }
   
-  # Align with annotation
-  valid_idx <- !is.na(surv_time) & !is.na(surv_event) & surv_time > 0
+  # Create merged data frame to ensure proper alignment
+  ranking_subset <- rankings[, c("sample_id", "ensemble_probability")]
+  colnames(ranking_subset) <- c("merge_id", "risk_score")
+  
+  annotation$merge_id <- annotation[[annot_sample_col]]
+  merged <- merge(annotation, ranking_subset, by = "merge_id", all.x = FALSE, all.y = FALSE)
+  
+  log_message(sprintf("Matched %d samples between rankings and annotation for survival", nrow(merged)))
+  
+  if (nrow(merged) < 10) {
+    log_message("Insufficient matched samples for survival analysis (< 10)", "WARN")
+    return(NULL)
+  }
+  
+  # Get survival data from merged (now properly aligned with risk scores)
+  surv_time <- suppressWarnings(as.numeric(as.character(merged[[time_col]])))
+  surv_event <- suppressWarnings(as.numeric(as.character(merged[[event_col]])))
+  risk_scores <- merged$risk_score
+  
+  # Filter for valid survival data
+  valid_idx <- !is.na(surv_time) & !is.na(surv_event) & !is.na(risk_scores) & surv_time > 0
   if (sum(valid_idx) < 10) return(NULL)
   
   tryCatch({
@@ -2051,16 +2082,28 @@ perform_model_risk_survival <- function(rankings, annotation, time_col, event_co
     event_vals <- surv_event[valid_idx]
     risk_vals <- risk_scores[valid_idx]
     
+    log_message(sprintf("Survival analysis: %d valid samples, risk score range: %.3f - %.3f", 
+                        length(risk_vals), min(risk_vals), max(risk_vals)))
+    
     # Median split
     high_risk <- risk_vals >= median(risk_vals, na.rm = TRUE)
     
-    if (sum(high_risk) < 3 || sum(!high_risk) < 3) return(NULL)
+    # Log group sizes and event distribution for debugging
+    n_high <- sum(high_risk)
+    n_low <- sum(!high_risk)
+    events_high <- sum(event_vals[high_risk], na.rm = TRUE)
+    events_low <- sum(event_vals[!high_risk], na.rm = TRUE)
+    log_message(sprintf("Risk groups: High=%d (events=%d), Low=%d (events=%d), median cutoff=%.3f", 
+                        n_high, events_high, n_low, events_low, median(risk_vals, na.rm = TRUE)))
+    
+    if (n_high < 3 || n_low < 3) return(NULL)
     
     surv_obj <- Surv(time_vals, event_vals)
     
     # Log-rank test
     surv_diff <- survdiff(surv_obj ~ high_risk)
     logrank_p <- 1 - pchisq(surv_diff$chisq, df = 1)
+    log_message(sprintf("Log-rank chi-sq=%.3f, p=%.4e", surv_diff$chisq, logrank_p))
     
     # Cox model
     cox_fit <- coxph(surv_obj ~ risk_vals)
