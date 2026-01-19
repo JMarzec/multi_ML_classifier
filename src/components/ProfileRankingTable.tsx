@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProfileRanking } from "@/types/ml-results";
-import { Search, ArrowUpDown, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Search, ArrowUpDown, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Filter } from "lucide-react";
+import { toast } from "sonner";
 
 interface ProfileRankingTableProps {
   rankings: ProfileRanking[];
@@ -26,14 +27,24 @@ const CLASS_NAMES: Record<string, string> = {
 
 const PAGE_SIZE = 50;
 
+type FilterMode = "all" | "misclassified" | "top_ranked";
+
 export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTableProps) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<keyof ProfileRanking>("rank");
   const [sortAsc, setSortAsc] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
 
   const filteredAndSorted = useMemo(() => {
     let data = [...rankings];
+
+    // Apply filter mode
+    if (filterMode === "misclassified") {
+      data = data.filter(r => !r.correct);
+    } else if (filterMode === "top_ranked") {
+      data = data.filter(r => r.top_profile);
+    }
 
     // Filter by sample_id or sample_index
     if (search) {
@@ -58,12 +69,12 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
     });
 
     return data;
-  }, [rankings, search, sortField, sortAsc]);
+  }, [rankings, search, sortField, sortAsc, filterMode]);
 
   // Reset page when search changes
   useMemo(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, filterMode]);
 
   const totalPages = Math.ceil(filteredAndSorted.length / PAGE_SIZE);
   const paginatedData = filteredAndSorted.slice(
@@ -85,6 +96,7 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
     const top = rankings.filter((r) => r.top_profile);
     const topCorrect = top.filter((r) => r.correct).length;
     const totalCorrect = rankings.filter((r) => r.correct).length;
+    const misclassified = rankings.filter((r) => !r.correct).length;
     
     return {
       topCount: top.length,
@@ -93,8 +105,58 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
       avgConfidenceTop: top.length > 0 
         ? (top.reduce((sum, r) => sum + r.confidence, 0) / top.length) * 100 
         : 0,
+      misclassifiedCount: misclassified,
     };
   }, [rankings]);
+
+  // CSV Export function
+  const exportToCSV = useCallback(() => {
+    try {
+      const headers = [
+        "Rank",
+        "Sample ID",
+        "Actual Class",
+        "Predicted Class",
+        "Ensemble Probability",
+        "Confidence",
+        "Risk Score (Positive)",
+        "Top Profile",
+        "Correct"
+      ];
+
+      const rows = filteredAndSorted.map(r => [
+        r.rank,
+        r.sample_id || `Sample_${r.sample_index}`,
+        CLASS_NAMES[r.actual_class] || r.actual_class,
+        CLASS_NAMES[r.predicted_class] || r.predicted_class,
+        (r.ensemble_probability * 100).toFixed(2),
+        (r.confidence * 100).toFixed(2),
+        r.risk_score_class_1 !== undefined ? r.risk_score_class_1.toFixed(2) : "",
+        r.top_profile ? "Yes" : "No",
+        r.correct ? "Yes" : "No"
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `profile_rankings_${filterMode}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${filteredAndSorted.length} samples to CSV`);
+    } catch (error) {
+      console.error("CSV export error:", error);
+      toast.error("Failed to export CSV");
+    }
+  }, [filteredAndSorted, filterMode]);
 
   // Helper to display sample name
   const getSampleName = (r: ProfileRanking) => {
@@ -108,19 +170,66 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
           <div>
             <h3 className="text-lg font-semibold">Profile Rankings</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              All {rankings.length} samples ranked by prediction confidence 
+              {filterMode === "all" 
+                ? `All ${rankings.length} samples ranked by prediction confidence`
+                : filterMode === "misclassified"
+                ? `${stats.misclassifiedCount} misclassified samples`
+                : `Top ${topPercent}%: ${stats.topCount} samples`}
               <span className="text-primary"> (Top {topPercent}%: {stats.topCount} samples)</span>
             </p>
           </div>
           
-          <div className="relative max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search samples..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 bg-muted/50"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search samples..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 bg-muted/50"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToCSV}
+              className="gap-1.5"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          </div>
+        </div>
+
+        {/* Filter Toggles */}
+        <div className="flex items-center gap-2 mt-4">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Filter:</span>
+          <div className="flex gap-1">
+            <Button
+              variant={filterMode === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterMode("all")}
+              className="h-7 text-xs"
+            >
+              All ({rankings.length})
+            </Button>
+            <Button
+              variant={filterMode === "top_ranked" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterMode("top_ranked")}
+              className="h-7 text-xs"
+            >
+              Top {topPercent}% ({stats.topCount})
+            </Button>
+            <Button
+              variant={filterMode === "misclassified" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterMode("misclassified")}
+              className="h-7 text-xs"
+            >
+              Misclassified ({stats.misclassifiedCount})
+            </Button>
           </div>
         </div>
 
@@ -172,15 +281,21 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
               </TableHead>
               <TableHead>
                 <div className="text-center">
-                  Risk Scores
-                  <div className="text-xs font-normal text-muted-foreground">Neg / Pos</div>
+                  Risk Score
+                  <div className="text-xs font-normal text-muted-foreground">(Positive)</div>
                 </div>
               </TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.map((row) => (
+            {paginatedData.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  No samples match the current filter
+                </TableCell>
+              </TableRow>
+            ) : paginatedData.map((row) => (
               <TableRow 
                 key={row.sample_id || row.sample_index}
                 className={cn(
@@ -226,22 +341,10 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1 text-xs font-mono">
+                  <div className="flex items-center justify-center">
                     <span 
                       className={cn(
-                        "px-2 py-0.5 rounded",
-                        row.risk_score_class_0 && row.risk_score_class_0 > 50 
-                          ? "bg-primary/20 text-primary font-semibold" 
-                          : "bg-muted text-muted-foreground"
-                      )}
-                      title="Risk Score for Negative Class"
-                    >
-                      {row.risk_score_class_0 !== undefined ? row.risk_score_class_0.toFixed(0) : '--'}
-                    </span>
-                    <span className="text-muted-foreground">/</span>
-                    <span 
-                      className={cn(
-                        "px-2 py-0.5 rounded",
+                        "px-2 py-0.5 rounded text-xs font-mono",
                         row.risk_score_class_1 && row.risk_score_class_1 > 50 
                           ? "bg-destructive/20 text-destructive font-semibold" 
                           : "bg-muted text-muted-foreground"

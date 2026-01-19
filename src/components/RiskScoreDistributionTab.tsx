@@ -15,51 +15,33 @@ interface BoxplotStats {
   max: number;
   mean: number;
   n: number;
-  scoreType: "class_0" | "class_1";
 }
 
 export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabProps) {
-  // Calculate box plot statistics from the rankings
+  // Calculate box plot statistics from the rankings - only for Positive Risk Score (class_1)
   const boxplotData = useMemo(() => {
     if (!rankings || rankings.length === 0) return [];
 
     const classes = [...new Set(rankings.map(r => r.actual_class))].sort();
     const stats: BoxplotStats[] = [];
 
-    // For each class, compute risk score distributions for both risk_score_class_0 and risk_score_class_1
+    // For each actual class, compute risk score distribution for positive risk (class_1)
     classes.forEach(cls => {
       const classRankings = rankings.filter(r => r.actual_class === cls);
       
-      // Risk Score for Class 0 (Negative)
-      const scores0 = classRankings
-        .map(r => r.risk_score_class_0)
-        .filter((s): s is number => s !== undefined && s !== null)
-        .sort((a, b) => a - b);
-      
-      if (scores0.length > 0) {
-        stats.push(computeBoxplotStats(scores0, cls, "class_0"));
-      }
-
-      // Risk Score for Class 1 (Positive)
-      const scores1 = classRankings
+      // Risk Score for Class 1 (Positive) - the clinically meaningful one
+      const scores = classRankings
         .map(r => r.risk_score_class_1)
         .filter((s): s is number => s !== undefined && s !== null)
         .sort((a, b) => a - b);
       
-      if (scores1.length > 0) {
-        stats.push(computeBoxplotStats(scores1, cls, "class_1"));
+      if (scores.length > 0) {
+        stats.push(computeBoxplotStats(scores, cls));
       }
     });
 
     return stats;
   }, [rankings]);
-
-  // Group data by score type for side-by-side visualization
-  const groupedByScoreType = useMemo(() => {
-    const class0Stats = boxplotData.filter(s => s.scoreType === "class_0");
-    const class1Stats = boxplotData.filter(s => s.scoreType === "class_1");
-    return { class0Stats, class1Stats };
-  }, [boxplotData]);
 
   if (boxplotData.length === 0) {
     return (
@@ -72,34 +54,14 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
   return (
     <div className="space-y-6">
       <div className="bg-card rounded-xl border border-border p-6">
-        <h3 className="text-lg font-semibold mb-2">Risk Score Distributions by Class</h3>
+        <h3 className="text-lg font-semibold mb-2">Positive Risk Score Distribution by Actual Class</h3>
         <p className="text-sm text-muted-foreground mb-6">
-          Box plots showing the distribution of model-predicted risk scores (0-100) for each actual class.
-          Higher scores indicate higher confidence for that prediction.
+          Box plots showing the distribution of model-predicted positive risk scores (0-100) for each actual class.
+          Higher scores indicate higher confidence that a sample has the condition/outcome of interest.
         </p>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Risk Score Class 0 (Negative) Distribution */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-center border-b border-border pb-2">
-              Negative Class Risk Score Distribution
-            </h4>
-            <BoxplotSVG 
-              data={groupedByScoreType.class0Stats} 
-              colorScheme="negative"
-            />
-          </div>
-
-          {/* Risk Score Class 1 (Positive) Distribution */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-center border-b border-border pb-2">
-              Positive Class Risk Score Distribution
-            </h4>
-            <BoxplotSVG 
-              data={groupedByScoreType.class1Stats} 
-              colorScheme="positive"
-            />
-          </div>
+        <div className="flex justify-center">
+          <BoxplotSVG data={boxplotData} />
         </div>
       </div>
 
@@ -111,7 +73,6 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-3 font-medium">Actual Class</th>
-                <th className="text-left py-2 px-3 font-medium">Score Type</th>
                 <th className="text-right py-2 px-3 font-medium">N</th>
                 <th className="text-right py-2 px-3 font-medium">Min</th>
                 <th className="text-right py-2 px-3 font-medium">Q1</th>
@@ -125,15 +86,6 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
               {boxplotData.map((stat, idx) => (
                 <tr key={idx} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="py-2 px-3 font-medium">{stat.classLabel}</td>
-                  <td className="py-2 px-3">
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      stat.scoreType === "class_0" 
-                        ? "bg-primary/20 text-primary" 
-                        : "bg-destructive/20 text-destructive"
-                    }`}>
-                      {stat.scoreType === "class_0" ? "Negative Risk" : "Positive Risk"}
-                    </span>
-                  </td>
                   <td className="py-2 px-3 text-right font-mono">{stat.n}</td>
                   <td className="py-2 px-3 text-right font-mono">{stat.min.toFixed(1)}</td>
                   <td className="py-2 px-3 text-right font-mono">{stat.q1.toFixed(1)}</td>
@@ -149,33 +101,19 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
       </div>
 
       {/* Risk Score Explanation */}
-      <div className="bg-primary/5 rounded-xl border border-primary/20 p-6">
-        <h3 className="text-lg font-semibold mb-3">Understanding Risk Scores</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-          <div className="space-y-3">
-            <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
-              <h4 className="font-semibold text-primary mb-2">Negative Risk Score (Class 0)</h4>
-              <p className="text-muted-foreground">
-                Represents the model's predicted probability (0-100%) that a sample belongs to the 
-                <strong className="text-foreground"> negative/control class</strong>. A high Negative Risk score 
-                indicates the model is confident the sample does NOT have the condition or outcome of interest.
-              </p>
-            </div>
+      <div className="bg-destructive/5 rounded-xl border border-destructive/20 p-6">
+        <h3 className="text-lg font-semibold mb-3">Understanding Positive Risk Scores</h3>
+        <div className="text-sm space-y-3">
+          <p className="text-muted-foreground">
+            The <strong className="text-destructive">Positive Risk Score</strong> represents the model's predicted 
+            probability (0-100%) that a sample belongs to the <strong className="text-foreground">positive/case class</strong>. 
+            A high score indicates the model is confident the sample HAS the condition or outcome of interest.
+          </p>
+          <div className="p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
+            <strong>Note:</strong> The Negative Risk Score is simply 100 - Positive Risk Score, so only the positive 
+            score is displayed to avoid redundancy. These scores are derived from the ensemble model's probability 
+            outputs averaged across all base learners (RF, SVM, XGBoost, KNN, MLP).
           </div>
-          <div className="space-y-3">
-            <div className="p-4 bg-destructive/10 rounded-lg border border-destructive/20">
-              <h4 className="font-semibold text-destructive mb-2">Positive Risk Score (Class 1)</h4>
-              <p className="text-muted-foreground">
-                Represents the model's predicted probability (0-100%) that a sample belongs to the 
-                <strong className="text-foreground"> positive/case class</strong>. A high Positive Risk score 
-                indicates the model is confident the sample HAS the condition or outcome of interest.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
-          <strong>Note:</strong> For each sample, Negative Risk + Positive Risk = 100%. These scores are derived from 
-          the ensemble model's probability outputs averaged across all base learners (RF, SVM, XGBoost, KNN, MLP).
         </div>
       </div>
 
@@ -186,8 +124,8 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
           <div>
             <h4 className="font-medium text-foreground mb-2">Expected Patterns</h4>
             <ul className="space-y-1 list-disc list-inside">
-              <li><strong>True Negative samples:</strong> Should have high Negative Risk scores, low Positive Risk scores</li>
-              <li><strong>True Positive samples:</strong> Should have high Positive Risk scores, low Negative Risk scores</li>
+              <li><strong>True Negative samples:</strong> Should have LOW positive risk scores (&lt;50)</li>
+              <li><strong>True Positive samples:</strong> Should have HIGH positive risk scores (&gt;50)</li>
               <li>Clear separation between groups indicates strong model discrimination</li>
             </ul>
           </div>
@@ -208,8 +146,7 @@ export function RiskScoreDistributionTab({ rankings }: RiskScoreDistributionTabP
 // Helper function to compute boxplot statistics
 function computeBoxplotStats(
   sortedValues: number[], 
-  cls: string, 
-  scoreType: "class_0" | "class_1"
+  cls: string
 ): BoxplotStats {
   const n = sortedValues.length;
   const q1Idx = Math.floor(n * 0.25);
@@ -232,18 +169,16 @@ function computeBoxplotStats(
     q3: sortedValues[q3Idx],
     max: sortedValues[n - 1],
     mean: sortedValues.reduce((a, b) => a + b, 0) / n,
-    n,
-    scoreType
+    n
   };
 }
 
 // SVG Box Plot Component
 interface BoxplotSVGProps {
   data: BoxplotStats[];
-  colorScheme: "negative" | "positive";
 }
 
-function BoxplotSVG({ data, colorScheme }: BoxplotSVGProps) {
+function BoxplotSVG({ data }: BoxplotSVGProps) {
   if (data.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center text-muted-foreground">
@@ -267,7 +202,8 @@ function BoxplotSVG({ data, colorScheme }: BoxplotSVGProps) {
   const boxWidth = Math.min(60, plotWidth / (data.length + 1));
   const spacing = plotWidth / (data.length + 1);
   
-  const colors = colorScheme === "negative" 
+  // Color based on actual class
+  const getColors = (cls: string) => cls === "0" 
     ? { fill: "hsl(var(--primary) / 0.3)", stroke: "hsl(var(--primary))", mean: "hsl(var(--accent))" }
     : { fill: "hsl(var(--destructive) / 0.3)", stroke: "hsl(var(--destructive))", mean: "hsl(var(--accent))" };
 
@@ -313,6 +249,7 @@ function BoxplotSVG({ data, colorScheme }: BoxplotSVGProps) {
           {data.map((stat, idx) => {
             const xCenter = spacing * (idx + 1);
             const boxHalfWidth = boxWidth / 2;
+            const colors = getColors(stat.class);
             
             // Calculate whisker bounds (using 1.5 * IQR)
             const iqr = stat.q3 - stat.q1;
@@ -408,12 +345,12 @@ function BoxplotSVG({ data, colorScheme }: BoxplotSVGProps) {
 
         {/* Legend */}
         <g transform={`translate(${width - margin.right - 80}, ${margin.top})`}>
-          <line x1={0} x2={15} y1={5} y2={5} stroke={colors.stroke} strokeWidth={2.5} />
+          <line x1={0} x2={15} y1={5} y2={5} stroke="currentColor" strokeWidth={2.5} />
           <text x={20} y={8} className="text-xs fill-muted-foreground">Median</text>
           
           <polygon
             points="7,20 12,25 7,30 2,25"
-            fill={colors.mean}
+            fill="hsl(var(--accent))"
           />
           <text x={20} y={28} className="text-xs fill-muted-foreground">Mean</text>
         </g>
