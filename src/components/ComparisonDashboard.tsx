@@ -17,6 +17,9 @@ import {
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ComparisonReportExport } from "./ComparisonReportExport";
+import { FeatureUpsetPlot } from "./comparison/FeatureUpsetPlot";
+import { SurvivalComparisonSection } from "./comparison/SurvivalComparisonSection";
+import { FeatureDetailsSection } from "./comparison/FeatureDetailsSection";
 import type { MLResults, ModelPerformance } from "@/types/ml-results";
 
 export interface ComparisonRun {
@@ -38,14 +41,14 @@ const MODEL_LABELS: Record<string, string> = {
   soft_vote: "Soft Voting",
 };
 
-const RUN_COLORS = [
+export const RUN_COLORS = [
   { fill: "hsl(var(--primary))", text: "text-primary", bg: "bg-primary/10", border: "border-primary/30" },
   { fill: "hsl(var(--secondary))", text: "text-secondary", bg: "bg-secondary/10", border: "border-secondary/30" },
   { fill: "hsl(var(--accent))", text: "text-accent", bg: "bg-accent/10", border: "border-accent/30" },
   { fill: "hsl(var(--warning))", text: "text-warning", bg: "bg-warning/10", border: "border-warning/30" },
 ];
 
-const RUN_LABELS = ["Run A", "Run B", "Run C", "Run D"];
+export const RUN_LABELS = ["Run A", "Run B", "Run C", "Run D"];
 
 const METRICS = ["accuracy", "auroc", "sensitivity", "specificity", "f1_score"] as const;
 
@@ -96,11 +99,10 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
     });
   }, [runs]);
 
-  // Feature overlap analysis
+  // Feature overlap analysis (legacy for basic stats)
   const featureComparison = useMemo(() => {
     const featureSets = runs.map(run => new Set(run.data.selected_features || []));
     
-    // Find common features across all runs
     let common: string[] = [];
     if (featureSets.length > 0) {
       common = [...featureSets[0]].filter(f => 
@@ -108,7 +110,6 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
       );
     }
     
-    // Unique to each run
     const uniquePerRun = featureSets.map((set, idx) => 
       [...set].filter(f => 
         featureSets.every((otherSet, otherIdx) => 
@@ -118,6 +119,14 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
     );
     
     return { common, uniquePerRun, totals: featureSets.map(s => s.size) };
+  }, [runs]);
+
+  // Feature sets for UpSet plot
+  const featureSetsForUpset = useMemo(() => {
+    return runs.map(run => ({
+      name: run.name,
+      features: run.data.selected_features || [],
+    }));
   }, [runs]);
 
   // Performance difference table (comparing to first run)
@@ -298,11 +307,20 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
         </ResponsiveContainer>
       </div>
 
-      {/* Feature Comparison */}
+      {/* Survival Analysis Comparison */}
+      <SurvivalComparisonSection
+        runs={runs}
+        runColors={RUN_COLORS}
+        runLabels={RUN_LABELS}
+      />
+
+      {/* Feature Comparison with UpSet Plot */}
       <div className="bg-card rounded-xl p-6 border border-border">
         <h3 className="text-lg font-semibold mb-4">Selected Features Comparison</h3>
+        
+        {/* Summary cards */}
         <div className={cn(
-          "grid gap-4 mb-4",
+          "grid gap-4 mb-6",
           runs.length <= 3 ? `grid-cols-1 md:grid-cols-${runs.length + 1}` : "grid-cols-2 md:grid-cols-5"
         )}>
           <div className="bg-muted/30 rounded-lg p-4 text-center">
@@ -322,24 +340,23 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
           ))}
         </div>
 
-        {featureComparison.common.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm font-medium mb-2">Common features across all runs:</p>
-            <div className="flex flex-wrap gap-2">
-              {featureComparison.common.slice(0, 15).map(f => (
-                <span key={f} className="px-2 py-1 bg-accent/20 text-accent text-xs rounded-full">
-                  {f}
-                </span>
-              ))}
-              {featureComparison.common.length > 15 && (
-                <span className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-full">
-                  +{featureComparison.common.length - 15} more
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+        {/* UpSet-style visualization */}
+        <div className="mt-6">
+          <h4 className="text-sm font-medium mb-4">Feature Intersection Matrix</h4>
+          <FeatureUpsetPlot
+            featureSets={featureSetsForUpset}
+            runColors={RUN_COLORS}
+            runLabels={RUN_LABELS}
+          />
+        </div>
       </div>
+
+      {/* Feature Importance Rankings Details */}
+      <FeatureDetailsSection
+        runs={runs}
+        runColors={RUN_COLORS}
+        runLabels={RUN_LABELS}
+      />
 
       {/* Configuration Comparison */}
       <div className="bg-card rounded-xl p-6 border border-border">

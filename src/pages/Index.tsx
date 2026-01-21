@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { FileUploader } from "@/components/FileUploader";
 import { Dashboard } from "@/components/Dashboard";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ComparisonUploader } from "@/components/ComparisonUploader";
 import { ComparisonDashboard } from "@/components/ComparisonDashboard";
 import { DemoDataDownload } from "@/components/DemoDataDownload";
-import { Brain, Download, Github, FileCode2, Sparkles, Play, GitCompare } from "lucide-react";
+import { Brain, Download, Github, FileCode2, Sparkles, Play, GitCompare, Plus } from "lucide-react";
 import accelBioLogo from "@/assets/accelbio-logo.png";
 import type { MLResults } from "@/types/ml-results";
 import { demoData } from "@/data/demoData";
@@ -18,6 +18,15 @@ const Index = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("landing");
   const [comparisonFiles, setComparisonFiles] = useState<{ name: string; data: MLResults }[]>([]);
   const [comparisonStarted, setComparisonStarted] = useState(false);
+  const [showAddFiles, setShowAddFiles] = useState(false);
+
+  // Handle adding more files from the comparison dashboard
+  const handleAddMoreFiles = useCallback((newFiles: { name: string; data: MLResults }[]) => {
+    setComparisonFiles(newFiles);
+    if (newFiles.length >= 4) {
+      setShowAddFiles(false);
+    }
+  }, []);
 
   if (viewMode === "single" && data) {
     return <Dashboard data={data} onReset={() => { setData(null); setViewMode("landing"); }} />;
@@ -30,7 +39,7 @@ const Index = () => {
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <Button variant="ghost" size="sm" onClick={() => { setComparisonFiles([]); setComparisonStarted(false); setViewMode("landing"); }}>
+                <Button variant="ghost" size="sm" onClick={() => { setComparisonFiles([]); setComparisonStarted(false); setShowAddFiles(false); setViewMode("landing"); }}>
                   ← Back
                 </Button>
                 <div className="flex items-center gap-3">
@@ -41,8 +50,35 @@ const Index = () => {
                   </div>
                 </div>
               </div>
-              <ThemeToggle />
+              <div className="flex items-center gap-3">
+                {comparisonFiles.length < 4 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2"
+                    onClick={() => setShowAddFiles(!showAddFiles)}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Files
+                  </Button>
+                )}
+                <ThemeToggle />
+              </div>
             </div>
+            
+            {/* Inline file adder */}
+            {showAddFiles && comparisonFiles.length < 4 && (
+              <div className="mt-4 p-4 bg-muted/30 rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium">Add more files to comparison (max {4 - comparisonFiles.length} more)</p>
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddFiles(false)}>Done</Button>
+                </div>
+                <ComparisonUploader 
+                  onFilesLoaded={handleAddMoreFiles} 
+                  currentFiles={comparisonFiles} 
+                />
+              </div>
+            )}
           </div>
         </header>
         <main className="container mx-auto px-4 py-8">
