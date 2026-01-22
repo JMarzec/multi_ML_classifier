@@ -17,6 +17,8 @@ import { SurvivalComparisonSection } from "./comparison/SurvivalComparisonSectio
 import { FeatureDetailsSection } from "./comparison/FeatureDetailsSection";
 import { MultiRunMetricTabs } from "./comparison/MultiRunMetricTabs";
 import { ROCRunsOverlayChart } from "./comparison/ROCRunsOverlayChart";
+import { ConfusionMatrixComparison } from "./comparison/ConfusionMatrixComparison";
+import { ModelSignaturesSection } from "./comparison/ModelSignaturesSection";
 import type { MLResults, ModelPerformance } from "@/types/ml-results";
 
 export interface ComparisonRun {
@@ -171,6 +173,13 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
       {/* Metric comparison tabs */}
       <MultiRunMetricTabs runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
 
+      {/* Confusion Matrix Comparison */}
+      <ConfusionMatrixComparison
+        runs={runs}
+        runColors={RUN_COLORS}
+        runLabels={RUN_LABELS}
+      />
+
       {/* ROC overlay across runs */}
       <ROCRunsOverlayChart runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
 
@@ -296,6 +305,13 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
           />
         </div>
       </div>
+
+      {/* Model Signatures (Feature Importance with CSV export) */}
+      <ModelSignaturesSection
+        runs={runs}
+        runColors={RUN_COLORS}
+        runLabels={RUN_LABELS}
+      />
 
       {/* Feature Importance Rankings Details */}
       <FeatureDetailsSection
