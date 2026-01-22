@@ -1,18 +1,13 @@
 import { useMemo } from "react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
   RadarChart,
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
 } from "recharts";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,6 +15,8 @@ import { ComparisonReportExport } from "./ComparisonReportExport";
 import { FeatureUpsetPlot } from "./comparison/FeatureUpsetPlot";
 import { SurvivalComparisonSection } from "./comparison/SurvivalComparisonSection";
 import { FeatureDetailsSection } from "./comparison/FeatureDetailsSection";
+import { MultiRunMetricTabs } from "./comparison/MultiRunMetricTabs";
+import { ROCRunsOverlayChart } from "./comparison/ROCRunsOverlayChart";
 import type { MLResults, ModelPerformance } from "@/types/ml-results";
 
 export interface ComparisonRun {
@@ -53,23 +50,6 @@ export const RUN_LABELS = ["Run A", "Run B", "Run C", "Run D"];
 const METRICS = ["accuracy", "auroc", "sensitivity", "specificity", "f1_score"] as const;
 
 export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
-  // Compare metrics across models for all runs
-  const comparisonData = useMemo(() => {
-    const models = Object.keys(MODEL_LABELS) as (keyof ModelPerformance)[];
-    
-    return models.map(model => {
-      const entry: Record<string, string | number> = { model: MODEL_LABELS[model] };
-      
-      runs.forEach((run, idx) => {
-        const metrics = run.data.model_performance[model];
-        entry[`auroc${idx}`] = metrics?.auroc?.mean ? metrics.auroc.mean * 100 : 0;
-        entry[`accuracy${idx}`] = metrics?.accuracy?.mean ? metrics.accuracy.mean * 100 : 0;
-      });
-      
-      return entry;
-    }).filter(d => runs.some((_, idx) => (d[`auroc${idx}`] as number) > 0));
-  }, [runs]);
-
   // Best model per run
   const bestModels = useMemo(() => {
     return runs.map(run => {
@@ -188,45 +168,11 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
         })}
       </div>
 
-      {/* AUROC Comparison Chart */}
-      <div className="bg-card rounded-xl p-6 border border-border">
-        <h3 className="text-lg font-semibold mb-4">AUROC Comparison by Model</h3>
-        <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={comparisonData} layout="vertical" margin={{ left: 100 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis
-              type="number"
-              domain={[0, 100]}
-              tickFormatter={(v) => `${v}%`}
-              stroke="hsl(var(--muted-foreground))"
-            />
-            <YAxis
-              type="category"
-              dataKey="model"
-              stroke="hsl(var(--muted-foreground))"
-              tick={{ fontSize: 12 }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "8px",
-              }}
-              formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
-            />
-            <Legend />
-            {runs.map((_, idx) => (
-              <Bar
-                key={idx}
-                dataKey={`auroc${idx}`}
-                name={RUN_LABELS[idx]}
-                fill={RUN_COLORS[idx].fill}
-                radius={[0, 4, 4, 0]}
-              />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {/* Metric comparison tabs */}
+      <MultiRunMetricTabs runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
+
+      {/* ROC overlay across runs */}
+      <ROCRunsOverlayChart runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
 
       {/* Difference Table (vs Run A) */}
       {runs.length >= 2 && (
