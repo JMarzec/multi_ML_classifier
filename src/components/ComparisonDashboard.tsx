@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ComparisonReportExport } from "./ComparisonReportExport";
 import { FeatureUpsetPlot } from "./comparison/FeatureUpsetPlot";
@@ -19,6 +19,9 @@ import { MultiRunMetricTabs } from "./comparison/MultiRunMetricTabs";
 import { ROCRunsOverlayChart } from "./comparison/ROCRunsOverlayChart";
 import { ConfusionMatrixComparison } from "./comparison/ConfusionMatrixComparison";
 import { ModelSignaturesSection } from "./comparison/ModelSignaturesSection";
+import { BestModelSummaryCard } from "./comparison/BestModelSummaryCard";
+import { RunRankingSummary } from "./comparison/RunRankingSummary";
+import { FeatureStabilityPanel } from "./comparison/FeatureStabilityPanel";
 import type { MLResults, ModelPerformance } from "@/types/ml-results";
 
 export interface ComparisonRun {
@@ -148,6 +151,9 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
       )}>
         {runs.map((run, idx) => {
           const colors = RUN_COLORS[idx];
+          const sampleCount = run.data.preprocessing?.original_samples 
+            ?? run.data.profile_ranking?.all_rankings?.length 
+            ?? 0;
           return (
             <div key={run.name} className={cn("rounded-xl p-5 border", colors.bg, colors.border)}>
               <div className="flex items-center gap-2 mb-2">
@@ -158,6 +164,13 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
               <p className="text-sm text-muted-foreground">
                 Generated: {new Date(run.data.metadata.generated_at).toLocaleDateString()}
               </p>
+              
+              {/* Sample count */}
+              <div className="flex items-center gap-1.5 mt-2 text-sm text-muted-foreground">
+                <Users className="w-3.5 h-3.5" />
+                <span>{sampleCount} samples</span>
+              </div>
+              
               <div className="mt-3 pt-3 border-t border-border/30">
                 <p className="text-sm text-muted-foreground">Best Model</p>
                 <p className="font-semibold">{bestModels[idx].model}</p>
@@ -169,6 +182,9 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
           );
         })}
       </div>
+
+      {/* Best Model Summary Card */}
+      <BestModelSummaryCard runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
 
       {/* Metric comparison tabs */}
       <MultiRunMetricTabs runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
@@ -225,6 +241,9 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
           </div>
         </div>
       )}
+
+      {/* Per-Model Run Ranking */}
+      <RunRankingSummary runs={runs} runColors={RUN_COLORS} runLabels={RUN_LABELS} />
 
       {/* Radar Chart - Ensemble Comparison */}
       <div className="bg-card rounded-xl p-6 border border-border">
@@ -308,6 +327,13 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
 
       {/* Model Signatures (Feature Importance with CSV export) */}
       <ModelSignaturesSection
+        runs={runs}
+        runColors={RUN_COLORS}
+        runLabels={RUN_LABELS}
+      />
+
+      {/* Feature Stability Panel */}
+      <FeatureStabilityPanel
         runs={runs}
         runColors={RUN_COLORS}
         runLabels={RUN_LABELS}
