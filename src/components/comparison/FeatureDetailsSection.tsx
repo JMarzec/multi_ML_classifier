@@ -14,7 +14,59 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, FileText, Download, Dna } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { MLResults } from "@/types/ml-results";
+
+// Gene annotation database links
+const GeneLinks = ({ gene }: { gene: string }) => {
+  const geneCardsUrl = `https://www.genecards.org/cgi-bin/carddisp.pl?gene=${encodeURIComponent(gene)}`;
+  const ncbiUrl = `https://www.ncbi.nlm.nih.gov/gene/?term=${encodeURIComponent(gene)}`;
+  
+  return (
+    <TooltipProvider>
+      <div className="inline-flex items-center gap-1">
+        <span className="font-mono text-sm">{gene}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <a
+              href={geneCardsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors text-blue-500 hover:text-blue-600"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="text-[9px] font-bold">GC</span>
+            </a>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            View on GeneCards
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <a
+              href={ncbiUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors text-green-600 hover:text-green-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="text-[9px] font-bold">N</span>
+            </a>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Search NCBI Gene
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
+  );
+};
 
 interface FeatureDetailsSectionProps {
   runs: { name: string; data: MLResults }[];
@@ -269,7 +321,7 @@ export function FeatureDetailsSection({
               <TableBody>
                 {topFeatures.map((row) => (
                   <TableRow key={row.feature}>
-                    <TableCell className="font-mono text-sm">{row.feature}</TableCell>
+                    <TableCell><GeneLinks gene={row.feature} /></TableCell>
                     {row.ranks.map((rank, idx) => (
                       <TableCell key={idx} className="text-center">
                         {rank !== null ? (
@@ -371,7 +423,7 @@ export function FeatureDetailsSection({
                       {sig.features.slice(0, 20).map((f) => (
                         <TableRow key={f.feature}>
                           <TableCell className="text-xs text-muted-foreground">{f.rank}</TableCell>
-                          <TableCell className="font-mono text-xs">{f.feature}</TableCell>
+                          <TableCell><GeneLinks gene={f.feature} /></TableCell>
                           <TableCell className="text-right font-mono text-xs">
                             {f.importance !== null 
                               ? (f.importance < 0.001 ? f.importance.toExponential(2) : f.importance.toFixed(4))
