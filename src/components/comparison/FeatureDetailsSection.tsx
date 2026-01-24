@@ -22,47 +22,58 @@ import {
 } from "@/components/ui/tooltip";
 import type { MLResults } from "@/types/ml-results";
 
-// Gene annotation database links
+// Gene annotation database links configuration
+const geneDatabases = [
+  { id: "gc", label: "GC", name: "GeneCards", color: "text-blue-500 hover:text-blue-600", 
+    url: (gene: string) => `https://www.genecards.org/cgi-bin/carddisp.pl?gene=${encodeURIComponent(gene)}` },
+  { id: "ncbi", label: "N", name: "NCBI Gene", color: "text-green-600 hover:text-green-700", 
+    url: (gene: string) => `https://www.ncbi.nlm.nih.gov/gene/?term=${encodeURIComponent(gene)}` },
+  { id: "ensembl", label: "E", name: "Ensembl", color: "text-red-500 hover:text-red-600", 
+    url: (gene: string) => `https://www.ensembl.org/Human/Search/Results?q=${encodeURIComponent(gene)}` },
+  { id: "uniprot", label: "U", name: "UniProt", color: "text-amber-600 hover:text-amber-700", 
+    url: (gene: string) => `https://www.uniprot.org/uniprotkb?query=${encodeURIComponent(gene)}` },
+  { id: "hpa", label: "PA", name: "Human Protein Atlas", color: "text-indigo-500 hover:text-indigo-600", 
+    url: (gene: string) => `https://www.proteinatlas.org/search/${encodeURIComponent(gene)}` },
+  { id: "civic", label: "Cv", name: "CIViC", color: "text-teal-500 hover:text-teal-600", 
+    url: (gene: string) => `https://civicdb.org/entities/genes?name=${encodeURIComponent(gene)}` },
+  { id: "vicc", label: "CV", name: "Cancer Variants", color: "text-rose-500 hover:text-rose-600", 
+    url: (gene: string) => `https://search.cancervariants.org/?searchTerm=${encodeURIComponent(gene)}` },
+  { id: "gepia", label: "GP", name: "GEPIA", color: "text-cyan-600 hover:text-cyan-700", 
+    url: (gene: string) => `http://gepia.cancer-pku.cn/detail.php?gene=${encodeURIComponent(gene)}` },
+  { id: "dgidb", label: "DG", name: "DGIdb", color: "text-purple-500 hover:text-purple-600", 
+    url: (gene: string) => `https://beta.dgidb.org/genes/${encodeURIComponent(gene)}` },
+  { id: "gdsc", label: "RX", name: "Cancer Rx Gene", color: "text-orange-500 hover:text-orange-600", 
+    url: (gene: string) => `https://www.cancerrxgene.org/translation/Gene/${encodeURIComponent(gene)}` },
+  { id: "cansar", label: "CS", name: "canSAR", color: "text-pink-500 hover:text-pink-600", 
+    url: (gene: string) => `https://cansar.ai/search?q=${encodeURIComponent(gene)}` },
+];
+
 const GeneLinks = ({ gene }: { gene: string }) => {
-  const geneCardsUrl = `https://www.genecards.org/cgi-bin/carddisp.pl?gene=${encodeURIComponent(gene)}`;
-  const ncbiUrl = `https://www.ncbi.nlm.nih.gov/gene/?term=${encodeURIComponent(gene)}`;
-  
   return (
     <TooltipProvider>
-      <div className="inline-flex items-center gap-1">
-        <span className="font-mono text-sm">{gene}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <a
-              href={geneCardsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors text-blue-500 hover:text-blue-600"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span className="text-[9px] font-bold">GC</span>
-            </a>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            View on GeneCards
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <a
-              href={ncbiUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors text-green-600 hover:text-green-700"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span className="text-[9px] font-bold">N</span>
-            </a>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            Search NCBI Gene
-          </TooltipContent>
-        </Tooltip>
+      <div className="inline-flex items-center gap-0.5 flex-wrap">
+        <span className="font-mono text-sm mr-1">{gene}</span>
+        {geneDatabases.map((db) => (
+          <Tooltip key={db.id}>
+            <TooltipTrigger asChild>
+              <a
+                href={db.url(gene)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "inline-flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors",
+                  db.color
+                )}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span className="text-[8px] font-bold">{db.label}</span>
+              </a>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {db.name}
+            </TooltipContent>
+          </Tooltip>
+        ))}
       </div>
     </TooltipProvider>
   );
