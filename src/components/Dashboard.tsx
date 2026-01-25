@@ -21,6 +21,7 @@ import {
   Info,
   BoxSelect,
   Activity,
+  Dna,
   Filter,
   Heart,
 } from "lucide-react";
@@ -52,6 +53,7 @@ import { MLMethodInfoPanel } from "./MLMethodInfoPanel";
 import { FeatureSelectionVisualization } from "./FeatureSelectionVisualization";
 import { RiskScoreDistributionTab } from "./RiskScoreDistributionTab";
 import { SurvivalAnalysisTab } from "./SurvivalAnalysisTab";
+import { GeneSignaturesTab } from "./GeneSignaturesTab";
 import type { MLResults } from "@/types/ml-results";
 
 interface DashboardProps {
@@ -231,6 +233,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
               <Filter className="w-4 h-4 mr-2" />
               Selection
             </TabsTrigger>
+            <TabsTrigger value="signatures" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
+              <Dna className="w-4 h-4 mr-2" />
+              Signatures
+            </TabsTrigger>
             <TabsTrigger value="boxplots" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md font-medium">
               <BoxSelect className="w-4 h-4 mr-2" />
               Expression
@@ -398,6 +404,10 @@ export function Dashboard({ data, onReset }: DashboardProps) {
 
           <TabsContent value="feature-selection">
             <FeatureSelectionVisualization data={data} />
+          </TabsContent>
+
+          <TabsContent value="signatures">
+            <GeneSignaturesTab data={data} />
           </TabsContent>
 
           <TabsContent value="boxplots">
