@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ComparisonUploader } from "@/components/ComparisonUploader";
 import { ComparisonDashboard } from "@/components/ComparisonDashboard";
 import { DemoDataDownload } from "@/components/DemoDataDownload";
-import { Brain, Download, Github, FileCode2, Sparkles, Play, GitCompare, Plus } from "lucide-react";
+import { Brain, Download, FileCode2, Sparkles, Play, GitCompare, Plus } from "lucide-react";
 import accelBioLogo from "@/assets/accelbio-logo.png";
 import type { MLResults } from "@/types/ml-results";
 import { demoData } from "@/data/demoData";
@@ -131,12 +131,6 @@ const Index = () => {
               <GitCompare className="w-5 h-5" />
               Compare Runs
             </Button>
-            <a href="https://github.com/drzeeshanahmed/intelligenes" target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="lg" className="gap-2">
-                <Github className="w-5 h-5" />
-                View IntelliGenes
-              </Button>
-            </a>
           </div>
         </div>
 
@@ -221,10 +215,8 @@ const Index = () => {
 
         <footer className="mt-20 pt-8 border-t border-border text-center text-sm text-muted-foreground">
           <p>
-            Inspired by{" "}
-            <a href="https://academic.oup.com/bioinformatics/article/39/12/btad755/7473370" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">IntelliGenes</a>
-            {" "}and{" "}
-            <a href="https://github.com/CoLAB-AccelBio/molecular-classification-analysis" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Molecular Classification Analysis</a>
+            Multi-Method ML Classifier • Powered by{" "}
+            <a href="https://accelbio.pt/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">AccelBio</a>
           </p>
         </footer>
       </div>
