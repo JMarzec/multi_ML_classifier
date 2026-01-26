@@ -2,10 +2,28 @@ import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/type
 
 const RUN_COLORS_HEX = ["#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b"];
 const RUN_LABELS = ["Run A", "Run B", "Run C", "Run D"];
+const MODEL_COLORS_HEX: Record<string, string> = {
+  rf: "#10b981",
+  svm: "#8b5cf6",
+  xgboost: "#f59e0b",
+  knn: "#ec4899",
+  mlp: "#06b6d4",
+  hard_vote: "#6366f1",
+  soft_vote: "#0ea5e9",
+};
+const MODEL_LABELS: Record<string, string> = {
+  rf: "Random Forest",
+  svm: "SVM",
+  xgboost: "XGBoost",
+  knn: "KNN",
+  mlp: "MLP",
+  hard_vote: "Hard Voting",
+  soft_vote: "Soft Voting",
+};
 
 type ModelKey = keyof ModelPerformance;
 
-function toFiniteNumber(value: unknown): number | undefined {
+export function toFiniteNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
     const n = Number(value);
@@ -319,5 +337,228 @@ export function buildUpsetMatrixSVG(runs: { name: string; data: MLResults }[]): 
     ${bars}
     ${dotMatrix}
     ${runLabelsEl}
+  </svg>`;
+}
+
+// ============================================================================
+// SINGLE-RUN SVG BUILDERS
+// ============================================================================
+
+// Build single-run ROC Overlay SVG (all models)
+export function buildSingleRunROCSVG(data: MLResults): string {
+  const width = 520;
+  const height = 400;
+  const margin = { top: 30, right: 140, bottom: 50, left: 60 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+
+  const models = Object.keys(data.model_performance).filter(
+    (m) => data.model_performance[m as ModelKey]?.roc_curve?.length
+  ) as ModelKey[];
+
+  const fprPoints = Array.from({ length: 101 }, (_, i) => i / 100);
+
+  const curvesData = models.map((model) => {
+    const roc = data.model_performance[model]?.roc_curve;
+    if (!roc || roc.length === 0) return null;
+
+    const sorted = [...roc].sort((a, b) => a.fpr - b.fpr);
+
+    return fprPoints.map((fpr) => {
+      let lower = sorted[0];
+      let upper = sorted[sorted.length - 1];
+
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i].fpr <= fpr && sorted[i + 1].fpr >= fpr) {
+          lower = sorted[i];
+          upper = sorted[i + 1];
+          break;
+        }
+      }
+
+      const tpr =
+        upper.fpr === lower.fpr
+          ? lower.tpr
+          : lower.tpr + ((fpr - lower.fpr) / (upper.fpr - lower.fpr)) * (upper.tpr - lower.tpr);
+
+      return { fpr, tpr };
+    });
+  });
+
+  const aurocs = models.map((model) => {
+    const val = data.model_performance[model]?.auroc?.mean;
+    return val ? (val * 100).toFixed(1) : "N/A";
+  });
+
+  const buildPath = (points: { fpr: number; tpr: number }[]) => {
+    return points
+      .map((p, i) => {
+        const x = margin.left + p.fpr * plotWidth;
+        const y = margin.top + (1 - p.tpr) * plotHeight;
+        return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .join(" ");
+  };
+
+  const paths = curvesData
+    .map((curve, idx) => {
+      if (!curve) return "";
+      const model = models[idx];
+      const color = MODEL_COLORS_HEX[model] || "#64748b";
+      return `<path d="${buildPath(curve)}" fill="none" stroke="${color}" stroke-width="2" />`;
+    })
+    .join("\n");
+
+  const diagLine = `<line x1="${margin.left}" y1="${margin.top + plotHeight}" x2="${margin.left + plotWidth}" y2="${margin.top}" stroke="#94a3b8" stroke-dasharray="5 5" stroke-width="1" />`;
+  const xAxis = `<line x1="${margin.left}" y1="${margin.top + plotHeight}" x2="${margin.left + plotWidth}" y2="${margin.top + plotHeight}" stroke="#475569" stroke-width="1" />`;
+  const yAxis = `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#475569" stroke-width="1" />`;
+
+  const xTicks = [0, 25, 50, 75, 100]
+    .map((v) => {
+      const x = margin.left + (v / 100) * plotWidth;
+      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${v}%</text>`;
+    })
+    .join("");
+
+  const yTicks = [0, 25, 50, 75, 100]
+    .map((v) => {
+      const y = margin.top + (1 - v / 100) * plotHeight;
+      return `<text x="${margin.left - 8}" y="${y + 3}" text-anchor="end" font-size="10" fill="#64748b">${v}%</text>`;
+    })
+    .join("");
+
+  const xLabel = `<text x="${margin.left + plotWidth / 2}" y="${height - 8}" text-anchor="middle" font-size="11" fill="#475569">False Positive Rate</text>`;
+  const yLabel = `<text x="14" y="${margin.top + plotHeight / 2}" text-anchor="middle" font-size="11" fill="#475569" transform="rotate(-90 14 ${margin.top + plotHeight / 2})">True Positive Rate</text>`;
+
+  const legend = models
+    .map((model, idx) => {
+      const y = margin.top + 10 + idx * 20;
+      const color = MODEL_COLORS_HEX[model] || "#64748b";
+      const label = MODEL_LABELS[model] || model;
+      return `
+        <rect x="${margin.left + plotWidth + 10}" y="${y - 5}" width="12" height="12" rx="2" fill="${color}" />
+        <text x="${margin.left + plotWidth + 26}" y="${y + 5}" font-size="9" fill="#334155">${label} (${aurocs[idx]}%)</text>
+      `;
+    })
+    .join("");
+
+  const title = `<text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">ROC Curves - All Models</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    ${title}
+    ${xAxis}
+    ${yAxis}
+    ${diagLine}
+    ${paths}
+    ${xTicks}
+    ${yTicks}
+    ${xLabel}
+    ${yLabel}
+    ${legend}
+  </svg>`;
+}
+
+// Build single-run Kaplan-Meier SVG (high vs low risk)
+export function buildSingleRunKMSVG(data: MLResults): string {
+  const width = 500;
+  const height = 350;
+  const margin = { top: 40, right: 120, bottom: 50, left: 60 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+
+  const survival = data.survival_analysis;
+  const modelScores = normalizeModelRiskScores(survival?.model_risk_scores);
+  const softVote = modelScores.find((m) => m.model === "soft_vote" || m.model === "ensemble");
+
+  const highCurve = softVote?.km_curve_high || [];
+  const lowCurve = softVote?.km_curve_low || [];
+
+  const allTimes = new Set<number>();
+  highCurve.forEach((p) => allTimes.add(p.time));
+  lowCurve.forEach((p) => allTimes.add(p.time));
+  const maxTime = Math.max(...allTimes, 1);
+
+  const buildStepPath = (curve: { time: number; surv: number }[]) => {
+    if (curve.length === 0) return "";
+    const sorted = [...curve].sort((a, b) => a.time - b.time);
+
+    let path = "";
+    sorted.forEach((p, i) => {
+      const x = margin.left + (p.time / maxTime) * plotWidth;
+      const y = margin.top + (1 - p.surv) * plotHeight;
+
+      if (i === 0) {
+        path += `M ${margin.left} ${margin.top} L ${x} ${margin.top} L ${x} ${y}`;
+      } else {
+        const prevY = margin.top + (1 - sorted[i - 1].surv) * plotHeight;
+        path += ` L ${x} ${prevY} L ${x} ${y}`;
+      }
+    });
+    return path;
+  };
+
+  const highPath = buildStepPath(highCurve);
+  const lowPath = buildStepPath(lowCurve);
+
+  const paths = `
+    ${lowPath ? `<path d="${lowPath}" fill="none" stroke="#10b981" stroke-width="2.5" />` : ""}
+    ${highPath ? `<path d="${highPath}" fill="none" stroke="#ef4444" stroke-width="2.5" />` : ""}
+  `;
+
+  const xAxis = `<line x1="${margin.left}" y1="${margin.top + plotHeight}" x2="${margin.left + plotWidth}" y2="${margin.top + plotHeight}" stroke="#475569" stroke-width="1" />`;
+  const yAxis = `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#475569" stroke-width="1" />`;
+
+  const xTicks = [0, 0.25, 0.5, 0.75, 1]
+    .map((v) => {
+      const x = margin.left + v * plotWidth;
+      const label = (v * maxTime).toFixed(0);
+      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`;
+    })
+    .join("");
+
+  const yTicks = [0, 25, 50, 75, 100]
+    .map((v) => {
+      const y = margin.top + (1 - v / 100) * plotHeight;
+      return `<text x="${margin.left - 8}" y="${y + 3}" text-anchor="end" font-size="10" fill="#64748b">${v}%</text>`;
+    })
+    .join("");
+
+  const xLabel = `<text x="${margin.left + plotWidth / 2}" y="${height - 8}" text-anchor="middle" font-size="11" fill="#475569">Time</text>`;
+  const yLabel = `<text x="14" y="${margin.top + plotHeight / 2}" text-anchor="middle" font-size="11" fill="#475569" transform="rotate(-90 14 ${margin.top + plotHeight / 2})">Survival Probability</text>`;
+
+  // Stats
+  const stats = softVote?.stats;
+  const pValue = stats?.logrank_p !== undefined ? toFiniteNumber(stats.logrank_p) : undefined;
+  const hr = stats?.cox_hr !== undefined ? toFiniteNumber(stats.cox_hr) : undefined;
+
+  const statsText = `
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 80}" font-size="9" fill="#64748b">Log-rank p:</text>
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 94}" font-size="10" font-weight="600" fill="${pValue !== undefined && pValue < 0.05 ? '#10b981' : '#64748b'}">${pValue !== undefined ? pValue.toFixed(4) : "N/A"}</text>
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 115}" font-size="9" fill="#64748b">Hazard Ratio:</text>
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 129}" font-size="10" font-weight="600" fill="#334155">${hr !== undefined ? hr.toFixed(2) : "N/A"}</text>
+  `;
+
+  const legend = `
+    <rect x="${margin.left + plotWidth + 15}" y="${margin.top + 10}" width="12" height="12" rx="2" fill="#ef4444" />
+    <text x="${margin.left + plotWidth + 31}" y="${margin.top + 20}" font-size="10" fill="#334155">High Risk</text>
+    <rect x="${margin.left + plotWidth + 15}" y="${margin.top + 32}" width="12" height="12" rx="2" fill="#10b981" />
+    <text x="${margin.left + plotWidth + 31}" y="${margin.top + 42}" font-size="10" fill="#334155">Low Risk</text>
+  `;
+
+  const title = `<text x="${width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">Kaplan-Meier Survival Curves</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    ${title}
+    ${xAxis}
+    ${yAxis}
+    ${paths}
+    ${xTicks}
+    ${yTicks}
+    ${xLabel}
+    ${yLabel}
+    ${legend}
+    ${statsText}
   </svg>`;
 }

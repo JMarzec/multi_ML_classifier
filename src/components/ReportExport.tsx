@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, PermutationMetric } from "@/types/ml-results";
+import { buildSingleRunROCSVG, buildSingleRunKMSVG } from "@/utils/chartToSvg";
 
 interface ReportExportProps {
   data: MLResults;
@@ -21,6 +22,7 @@ interface ReportExportProps {
 interface ReportSections {
   summary: boolean;
   modelPerformance: boolean;
+  visualizations: boolean;
   featureImportance: boolean;
   permutationTesting: boolean;
   profileRanking: boolean;
@@ -34,6 +36,7 @@ export function ReportExport({ data }: ReportExportProps) {
   const [sections, setSections] = useState<ReportSections>({
     summary: true,
     modelPerformance: true,
+    visualizations: true,
     featureImportance: true,
     permutationTesting: true,
     profileRanking: true,
@@ -195,6 +198,35 @@ export function ReportExport({ data }: ReportExportProps) {
       html += `
         </tbody>
       </table>
+    </section>
+`;
+    }
+
+    // Visualizations Section (SVG Charts)
+    if (sections.visualizations) {
+      const rocSvg = buildSingleRunROCSVG(data);
+      const hasSurvival = data.survival_analysis?.model_risk_scores;
+      const kmSvg = hasSurvival ? buildSingleRunKMSVG(data) : null;
+
+      html += `
+    <section class="section">
+      <h2>Performance Visualizations</h2>
+      <h3>ROC Curves</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${rocSvg}
+      </div>
+`;
+
+      if (kmSvg) {
+        html += `
+      <h3 style="margin-top: 2rem;">Survival Analysis - Kaplan-Meier Curves</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${kmSvg}
+      </div>
+`;
+      }
+
+      html += `
     </section>
 `;
     }
