@@ -138,6 +138,8 @@ export interface ProfileRanking {
   top_profile: boolean;
   risk_score_class_0?: number;
   risk_score_class_1?: number;
+  surv_time?: number;
+  surv_event?: number;
 }
 
 export interface FeatureBoxplotClassStats {

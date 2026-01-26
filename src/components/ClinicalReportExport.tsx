@@ -405,10 +405,18 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
       const patientProb = patient.ensemble_probability || patient.confidence || 0;
       const patientRiskGroup: "high" | "low" = patientProb >= 0.5 ? "high" : "low";
       
-      // For clinical KM, we'd need patient's survival time if available
-      // Using confidence as proxy for demonstration - in real use, would need actual time/event data
+      // Use actual patient survival time and event data if available
+      const patientSurvTime = patient.surv_time;
+      const patientSurvEvent = patient.surv_event !== undefined ? patient.surv_event === 1 : undefined;
+      const hasPatientSurvival = patientSurvTime !== undefined && patientSurvTime > 0;
+      
       const kmSvg = survivalData && modelSurvivalData.length > 0 
-        ? buildClinicalKMSVG(data, undefined, undefined, patientRiskGroup) 
+        ? buildClinicalKMSVG(
+            data, 
+            hasPatientSurvival ? patientSurvTime : undefined, 
+            hasPatientSurvival ? patientSurvEvent : undefined, 
+            patientRiskGroup
+          ) 
         : null;
 
       html += `
@@ -420,9 +428,13 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 `;
 
       if (kmSvg) {
+        const survivalNote = hasPatientSurvival 
+          ? `Time: ${patientSurvTime.toFixed(1)}, ${patientSurvEvent ? "Event occurred" : "Censored"}`
+          : `Risk group based on ensemble probability of ${(patientProb * 100).toFixed(1)}%`;
         html += `
       <h3 style="margin-top: 1.5rem;">Survival Curves - Patient Risk Group: <span style="color: ${patientRiskGroup === 'high' ? '#dc2626' : '#16a34a'}; font-weight: 700;">${patientRiskGroup.toUpperCase()}</span></h3>
-      <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">Based on ensemble probability of ${(patientProb * 100).toFixed(1)}%</p>
+      <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">${survivalNote}</p>
+      ${hasPatientSurvival ? `<p style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.5rem;">Patient marker shown on curve: ${patientSurvEvent ? "▲ (event)" : "● (censored)"}</p>` : ""}
       <div style="text-align: center; margin: 1rem 0;">
         ${kmSvg}
       </div>
