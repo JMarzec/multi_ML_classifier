@@ -562,3 +562,140 @@ export function buildSingleRunKMSVG(data: MLResults): string {
     ${statsText}
   </svg>`;
 }
+
+// Build clinical-report Kaplan-Meier SVG with patient event marker
+export function buildClinicalKMSVG(
+  data: MLResults,
+  patientTime?: number,
+  patientEvent?: boolean,
+  patientRiskGroup?: "high" | "low"
+): string {
+  const width = 500;
+  const height = 350;
+  const margin = { top: 40, right: 120, bottom: 50, left: 60 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+
+  const survival = data.survival_analysis;
+  const modelScores = normalizeModelRiskScores(survival?.model_risk_scores);
+  const softVote = modelScores.find((m) => m.model === "soft_vote" || m.model === "ensemble");
+
+  const highCurve = softVote?.km_curve_high || [];
+  const lowCurve = softVote?.km_curve_low || [];
+
+  const allTimes = new Set<number>();
+  highCurve.forEach((p) => allTimes.add(p.time));
+  lowCurve.forEach((p) => allTimes.add(p.time));
+  const maxTime = Math.max(...allTimes, 1);
+
+  const buildStepPath = (curve: { time: number; surv: number }[]) => {
+    if (curve.length === 0) return "";
+    const sorted = [...curve].sort((a, b) => a.time - b.time);
+
+    let path = "";
+    sorted.forEach((p, i) => {
+      const x = margin.left + (p.time / maxTime) * plotWidth;
+      const y = margin.top + (1 - p.surv) * plotHeight;
+
+      if (i === 0) {
+        path += `M ${margin.left} ${margin.top} L ${x} ${margin.top} L ${x} ${y}`;
+      } else {
+        const prevY = margin.top + (1 - sorted[i - 1].surv) * plotHeight;
+        path += ` L ${x} ${prevY} L ${x} ${y}`;
+      }
+    });
+    return path;
+  };
+
+  // Get survival probability at patient time
+  const getSurvAtTime = (curve: { time: number; surv: number }[], time: number): number => {
+    if (curve.length === 0) return 1;
+    const sorted = [...curve].sort((a, b) => a.time - b.time);
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].time <= time) return sorted[i].surv;
+    }
+    return 1;
+  };
+
+  const highPath = buildStepPath(highCurve);
+  const lowPath = buildStepPath(lowCurve);
+
+  const paths = `
+    ${lowPath ? `<path d="${lowPath}" fill="none" stroke="#10b981" stroke-width="2.5" />` : ""}
+    ${highPath ? `<path d="${highPath}" fill="none" stroke="#ef4444" stroke-width="2.5" />` : ""}
+  `;
+
+  // Patient marker
+  let patientMarker = "";
+  if (patientTime !== undefined && patientRiskGroup) {
+    const curve = patientRiskGroup === "high" ? highCurve : lowCurve;
+    const surv = getSurvAtTime(curve, patientTime);
+    const px = margin.left + (patientTime / maxTime) * plotWidth;
+    const py = margin.top + (1 - surv) * plotHeight;
+    const markerColor = patientEvent ? "#dc2626" : "#0ea5e9";
+    const markerSymbol = patientEvent
+      ? `<polygon points="${px},${py - 10} ${px - 8},${py + 6} ${px + 8},${py + 6}" fill="${markerColor}" stroke="white" stroke-width="1.5" />`
+      : `<circle cx="${px}" cy="${py}" r="7" fill="${markerColor}" stroke="white" stroke-width="2" />`;
+
+    patientMarker = `
+      ${markerSymbol}
+      <text x="${px}" y="${py - 15}" text-anchor="middle" font-size="9" font-weight="600" fill="${markerColor}">Patient</text>
+    `;
+  }
+
+  const xAxis = `<line x1="${margin.left}" y1="${margin.top + plotHeight}" x2="${margin.left + plotWidth}" y2="${margin.top + plotHeight}" stroke="#475569" stroke-width="1" />`;
+  const yAxis = `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#475569" stroke-width="1" />`;
+
+  const xTicks = [0, 0.25, 0.5, 0.75, 1]
+    .map((v) => {
+      const x = margin.left + v * plotWidth;
+      const label = (v * maxTime).toFixed(0);
+      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`;
+    })
+    .join("");
+
+  const yTicks = [0, 25, 50, 75, 100]
+    .map((v) => {
+      const y = margin.top + (1 - v / 100) * plotHeight;
+      return `<text x="${margin.left - 8}" y="${y + 3}" text-anchor="end" font-size="10" fill="#64748b">${v}%</text>`;
+    })
+    .join("");
+
+  const xLabel = `<text x="${margin.left + plotWidth / 2}" y="${height - 8}" text-anchor="middle" font-size="11" fill="#475569">Time</text>`;
+  const yLabel = `<text x="14" y="${margin.top + plotHeight / 2}" text-anchor="middle" font-size="11" fill="#475569" transform="rotate(-90 14 ${margin.top + plotHeight / 2})">Survival Probability</text>`;
+
+  const stats = softVote?.stats;
+  const pValue = stats?.logrank_p !== undefined ? toFiniteNumber(stats.logrank_p) : undefined;
+  const hr = stats?.cox_hr !== undefined ? toFiniteNumber(stats.cox_hr) : undefined;
+
+  const statsText = `
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 80}" font-size="9" fill="#64748b">Log-rank p:</text>
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 94}" font-size="10" font-weight="600" fill="${pValue !== undefined && pValue < 0.05 ? '#10b981' : '#64748b'}">${pValue !== undefined ? pValue.toFixed(4) : "N/A"}</text>
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 115}" font-size="9" fill="#64748b">Hazard Ratio:</text>
+    <text x="${margin.left + plotWidth + 15}" y="${margin.top + 129}" font-size="10" font-weight="600" fill="#334155">${hr !== undefined ? hr.toFixed(2) : "N/A"}</text>
+  `;
+
+  const legend = `
+    <rect x="${margin.left + plotWidth + 15}" y="${margin.top + 10}" width="12" height="12" rx="2" fill="#ef4444" />
+    <text x="${margin.left + plotWidth + 31}" y="${margin.top + 20}" font-size="10" fill="#334155">High Risk</text>
+    <rect x="${margin.left + plotWidth + 15}" y="${margin.top + 32}" width="12" height="12" rx="2" fill="#10b981" />
+    <text x="${margin.left + plotWidth + 31}" y="${margin.top + 42}" font-size="10" fill="#334155">Low Risk</text>
+  `;
+
+  const title = `<text x="${width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">Kaplan-Meier Survival Curves</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    ${title}
+    ${xAxis}
+    ${yAxis}
+    ${paths}
+    ${patientMarker}
+    ${xTicks}
+    ${yTicks}
+    ${xLabel}
+    ${yLabel}
+    ${legend}
+    ${statsText}
+  </svg>`;
+}

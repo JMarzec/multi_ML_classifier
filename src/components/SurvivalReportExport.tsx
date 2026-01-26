@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2, Heart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
+import { buildSingleRunROCSVG, buildSingleRunKMSVG } from "@/utils/chartToSvg";
 
 interface SurvivalReportExportProps {
   data: MLResults;
@@ -20,6 +21,7 @@ interface SurvivalReportExportProps {
 
 interface ReportSections {
   overview: boolean;
+  visualizations: boolean;
   kmCurves: boolean;
   forestPlot: boolean;
   geneTable: boolean;
@@ -96,6 +98,7 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
   const { toast } = useToast();
   const [sections, setSections] = useState<ReportSections>({
     overview: true,
+    visualizations: true,
     kmCurves: true,
     forestPlot: true,
     geneTable: true,
@@ -213,6 +216,34 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
           <li><strong>p < 0.05:</strong> Statistically significant association with survival</li>
         </ul>
       </div>
+    </section>
+`;
+    }
+
+    // Visualizations Section (SVG Charts)
+    if (sections.visualizations) {
+      const rocSvg = buildSingleRunROCSVG(data);
+      const kmSvg = modelSurvivalData.length > 0 ? buildSingleRunKMSVG(data) : null;
+
+      html += `
+    <section>
+      <h2>Performance Visualizations</h2>
+      <h3 style="margin-top: 1rem;">ROC Curves - All Models</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${rocSvg}
+      </div>
+`;
+
+      if (kmSvg) {
+        html += `
+      <h3 style="margin-top: 2rem;">Survival Curves - Risk Stratification</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${kmSvg}
+      </div>
+`;
+      }
+
+      html += `
     </section>
 `;
     }
@@ -452,13 +483,15 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
               <Label htmlFor={key} className="capitalize">
                 {key === "kmCurves"
                   ? "Kaplan-Meier Curves Info"
-                  : key === "forestPlot"
-                    ? "Hazard Ratio Forest Plot"
-                    : key === "geneTable"
-                      ? "Gene Summary Table"
-                      : key === "modelRiskScores"
-                        ? "Model Risk Scores"
-                        : key.replace(/([A-Z])/g, " $1").trim()}
+                  : key === "visualizations"
+                    ? "SVG Visualizations (ROC & KM)"
+                    : key === "forestPlot"
+                      ? "Hazard Ratio Forest Plot"
+                      : key === "geneTable"
+                        ? "Gene Summary Table"
+                        : key === "modelRiskScores"
+                          ? "Model Risk Scores"
+                          : key.replace(/([A-Z])/g, " $1").trim()}
               </Label>
             </div>
           ))}

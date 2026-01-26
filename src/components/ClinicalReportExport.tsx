@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, FileText, Loader2, User, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, ProfileRanking, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
+import { buildSingleRunROCSVG, buildClinicalKMSVG } from "@/utils/chartToSvg";
 
 interface ClinicalReportExportProps {
   data: MLResults;
@@ -395,6 +396,37 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
       </table>
 `;
         }
+      }
+
+      // Visualizations Section - ROC and KM with patient marker
+      const rocSvg = buildSingleRunROCSVG(data);
+      
+      // Determine patient risk group based on ensemble probability
+      const patientProb = patient.ensemble_probability || patient.confidence || 0;
+      const patientRiskGroup: "high" | "low" = patientProb >= 0.5 ? "high" : "low";
+      
+      // For clinical KM, we'd need patient's survival time if available
+      // Using confidence as proxy for demonstration - in real use, would need actual time/event data
+      const kmSvg = survivalData && modelSurvivalData.length > 0 
+        ? buildClinicalKMSVG(data, undefined, undefined, patientRiskGroup) 
+        : null;
+
+      html += `
+      <h2>📊 Performance Visualizations</h2>
+      <h3 style="margin-top: 1rem;">ROC Curves - All Models</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${rocSvg}
+      </div>
+`;
+
+      if (kmSvg) {
+        html += `
+      <h3 style="margin-top: 1.5rem;">Survival Curves - Patient Risk Group: <span style="color: ${patientRiskGroup === 'high' ? '#dc2626' : '#16a34a'}; font-weight: 700;">${patientRiskGroup.toUpperCase()}</span></h3>
+      <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">Based on ensemble probability of ${(patientProb * 100).toFixed(1)}%</p>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${kmSvg}
+      </div>
+`;
       }
 
       html += `
