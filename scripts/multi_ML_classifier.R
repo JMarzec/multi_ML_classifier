@@ -1440,88 +1440,84 @@ run_permutation_test <- function(X, y, config, selected_features = NULL) {
 # PROFILE RANKING WITH CLASS-SPECIFIC RISK SCORES
 # =============================================================================
 
-rank_profiles <- function(X, y, models, config, sample_ids = NULL) {
+rank_profiles <- function(X, y, models, config, sample_ids = NULL, annotation = NULL) {
   log_message("Ranking profiles by prediction confidence with class-specific risk scores...")
   
   all_probs <- list()
   all_probs_class0 <- list()  # Probability for class 0 (negative)
   
-  # Get class levels
-  class_levels <- levels(y)
-  pos_class <- class_levels[2]  # Usually "1"
-  neg_class <- class_levels[1]  # Usually "0"
-  
+  # RF
   if (!is.null(models$rf)) {
-    prob_matrix <- tryCatch(predict(models$rf$model, X, type = "prob"), error = function(e) NULL)
-    if (!is.null(prob_matrix)) {
-      all_probs$rf <- safe_get_prob(prob_matrix, pos_class, n = nrow(X))
-      # Get class 0 probability
-      if (neg_class %in% colnames(prob_matrix)) {
-        all_probs_class0$rf <- prob_matrix[, neg_class]
-      } else {
-        all_probs_class0$rf <- 1 - all_probs$rf
-      }
-    }
+    tryCatch({
+      rf_probs <- predict(models$rf, X, type = "prob")
+      all_probs[["rf"]] <- rf_probs[, 2]
+      all_probs_class0[["rf"]] <- rf_probs[, 1]
+    }, error = function(e) log_message(sprintf("RF prediction failed: %s", e$message), "WARN"))
   }
   
+  # SVM
   if (!is.null(models$svm)) {
-    svm_pred <- tryCatch(predict(models$svm$model, as.matrix(X), probability = TRUE), error = function(e) NULL)
-    prob_matrix <- if (!is.null(svm_pred)) attr(svm_pred, "probabilities") else NULL
-    if (!is.null(prob_matrix)) {
-      all_probs$svm <- safe_get_prob(prob_matrix, pos_class, n = nrow(X))
-      if (neg_class %in% colnames(prob_matrix)) {
-        all_probs_class0$svm <- prob_matrix[, neg_class]
-      } else {
-        all_probs_class0$svm <- 1 - all_probs$svm
-      }
-    }
+    tryCatch({
+      svm_probs <- predict(models$svm, X, probability = TRUE)
+      svm_attr <- attr(svm_probs, "probabilities")
+      all_probs[["svm"]] <- svm_attr[, 2]
+      all_probs_class0[["svm"]] <- svm_attr[, 1]
+    }, error = function(e) log_message(sprintf("SVM prediction failed: %s", e$message), "WARN"))
   }
   
+  # XGBoost
   if (!is.null(models$xgboost)) {
-    prob_vec <- tryCatch(predict(models$xgboost$model, as.matrix(X)), error = function(e) NULL)
-    all_probs$xgboost <- safe_get_prob(prob_vec, n = nrow(X))
-    if (!is.null(all_probs$xgboost)) {
-      all_probs_class0$xgboost <- 1 - all_probs$xgboost
-    }
+    tryCatch({
+      xgb_probs <- predict(models$xgboost, as.matrix(X))
+      all_probs[["xgboost"]] <- xgb_probs
+      all_probs_class0[["xgboost"]] <- 1 - xgb_probs
+    }, error = function(e) log_message(sprintf("XGBoost prediction failed: %s", e$message), "WARN"))
   }
   
-  if (!is.null(models$mlp)) {
-    prob_matrix <- tryCatch(predict(models$mlp$model, as.matrix(X)), error = function(e) NULL)
-    all_probs$mlp <- safe_get_prob(prob_matrix, n = nrow(X))
-    if (!is.null(all_probs$mlp)) {
-      all_probs_class0$mlp <- 1 - all_probs$mlp
-    }
-  }
-  
-  if (!is.null(models$knn)) {
-    # For KNN we need to re-predict to get probabilities
-    knn_pred <- tryCatch({
-      knn(train = X, test = X, cl = y, k = config$knn_k, prob = TRUE)
-    }, error = function(e) NULL)
-    if (!is.null(knn_pred)) {
+  # KNN
+  if (!is.null(models$knn_train_data) && !is.null(models$knn_train_labels)) {
+    tryCatch({
+      k <- ifelse(is.null(config$knn_k), 5, config$knn_k)
+      knn_pred <- class::knn(models$knn_train_data, X, models$knn_train_labels, k = k, prob = TRUE)
       knn_prob <- attr(knn_pred, "prob")
-      # Adjust probability based on predicted class
-      knn_prob_pos <- ifelse(knn_pred == pos_class, knn_prob, 1 - knn_prob)
-      all_probs$knn <- knn_prob_pos
-      all_probs_class0$knn <- 1 - knn_prob_pos
-    }
+      knn_prob <- ifelse(as.character(knn_pred) == levels(y)[2], knn_prob, 1 - knn_prob)
+      all_probs[["knn"]] <- knn_prob
+      all_probs_class0[["knn"]] <- 1 - knn_prob
+    }, error = function(e) log_message(sprintf("KNN prediction failed: %s", e$message), "WARN"))
   }
   
-  # Keep only valid probability vectors with the expected length
-  all_probs <- Filter(function(v) is.numeric(v) && length(v) == nrow(X), all_probs)
-  all_probs_class0 <- Filter(function(v) is.numeric(v) && length(v) == nrow(X), all_probs_class0)
+  # MLP
+  if (!is.null(models$mlp)) {
+    tryCatch({
+      mlp_probs <- predict(models$mlp, X, type = "raw")
+      if (ncol(mlp_probs) >= 2) {
+        all_probs[["mlp"]] <- mlp_probs[, 2]
+        all_probs_class0[["mlp"]] <- mlp_probs[, 1]
+      } else {
+        all_probs[["mlp"]] <- as.vector(mlp_probs)
+        all_probs_class0[["mlp"]] <- 1 - as.vector(mlp_probs)
+      }
+    }, error = function(e) log_message(sprintf("MLP prediction failed: %s", e$message), "WARN"))
+  }
   
-  # Calculate ensemble probability for positive class
-  avg_prob <- if (length(all_probs) == 0) {
-    log_message("No usable probability outputs for profile ranking; using neutral 0.5", "WARN")
-    rep(0.5, nrow(X))
+  # Average probabilities for ensemble
+  if (length(all_probs) == 0) {
+    log_message("No valid model probabilities available for ranking", "WARN")
+    return(NULL)
+  }
+  
+  # Calculate mean probability across models
+  pos_class <- levels(y)[2]
+  neg_class <- levels(y)[1]
+  
+  avg_prob <- if (length(all_probs) == 1) {
+    as.numeric(all_probs[[1]])
   } else {
     as.numeric(rowMeans(do.call(cbind, all_probs), na.rm = TRUE))
   }
   
-  # Calculate ensemble probability for negative class
-  avg_prob_class0 <- if (length(all_probs_class0) == 0) {
-    1 - avg_prob
+  avg_prob_class0 <- if (length(all_probs_class0) == 1) {
+    as.numeric(all_probs_class0[[1]])
   } else {
     as.numeric(rowMeans(do.call(cbind, all_probs_class0), na.rm = TRUE))
   }
@@ -1548,6 +1544,33 @@ rank_profiles <- function(X, y, models, config, sample_ids = NULL) {
     ranking$sample_id <- sample_ids
   } else {
     ranking$sample_id <- paste0("Sample_", 1:nrow(X))
+  }
+  
+  # Add survival data if annotation is provided and config has time/event variables
+  if (!is.null(annotation) && !is.null(config$time_variable) && !is.null(config$event_variable)) {
+    time_col <- config$time_variable
+    event_col <- config$event_variable
+    
+    if (time_col %in% colnames(annotation) && event_col %in% colnames(annotation)) {
+      annot_sample_col <- colnames(annotation)[1]
+      
+      # Create lookup for survival data by sample ID
+      surv_lookup <- data.frame(
+        sample_id = annotation[[annot_sample_col]],
+        surv_time = suppressWarnings(as.numeric(as.character(annotation[[time_col]]))),
+        surv_event = suppressWarnings(as.numeric(as.character(annotation[[event_col]]))),
+        stringsAsFactors = FALSE
+      )
+      
+      # Merge survival data into ranking by sample_id
+      ranking$surv_time <- surv_lookup$surv_time[match(ranking$sample_id, surv_lookup$sample_id)]
+      ranking$surv_event <- surv_lookup$surv_event[match(ranking$sample_id, surv_lookup$sample_id)]
+      
+      log_message(sprintf("Added survival data to profile ranking: %d samples with valid time, %d with valid event",
+                          sum(!is.na(ranking$surv_time)), sum(!is.na(ranking$surv_event))))
+    } else {
+      log_message("Survival columns not found in annotation, skipping surv_time/surv_event in ranking", "WARN")
+    }
   }
   
   ranking <- ranking[order(-ranking$confidence), ]
@@ -2397,7 +2420,7 @@ run_pipeline <- function(config) {
   log_message(paste(rep("=", 60), collapse = ""))
   log_message("PROFILE RANKING")
   
-  ranking <- rank_profiles(X_selected, data$y, final_models, config, sample_ids = data$sample_ids)
+  ranking <- rank_profiles(X_selected, data$y, final_models, config, sample_ids = data$sample_ids, annotation = data$annotation)
   
   # Generate final predictions
   final_predictions <- ranking$predicted_class

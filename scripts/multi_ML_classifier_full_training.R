@@ -804,7 +804,7 @@ compute_umap_embedding <- function(X, y, sample_ids) {
 # PROFILE RANKING WITH CLASS-SPECIFIC RISK SCORES
 # =============================================================================
 
-rank_profiles <- function(results, y, sample_ids, top_percent = 10) {
+rank_profiles <- function(results, y, sample_ids, top_percent = 10, annotation = NULL, config = NULL) {
   log_message("Ranking sample profiles with class-specific risk scores...")
   
   ensemble_prob <- results$soft_vote$probabilities
@@ -836,6 +836,33 @@ rank_profiles <- function(results, y, sample_ids, top_percent = 10) {
     risk_score_class_1 = round(risk_score_positive, 2),
     stringsAsFactors = FALSE
   )
+  
+  # Add survival data if annotation is provided and config has time/event variables
+  if (!is.null(annotation) && !is.null(config) && !is.null(config$time_variable) && !is.null(config$event_variable)) {
+    time_col <- config$time_variable
+    event_col <- config$event_variable
+    
+    if (time_col %in% colnames(annotation) && event_col %in% colnames(annotation)) {
+      annot_sample_col <- colnames(annotation)[1]
+      
+      # Create lookup for survival data by sample ID
+      surv_lookup <- data.frame(
+        sample_id = annotation[[annot_sample_col]],
+        surv_time = suppressWarnings(as.numeric(as.character(annotation[[time_col]]))),
+        surv_event = suppressWarnings(as.numeric(as.character(annotation[[event_col]]))),
+        stringsAsFactors = FALSE
+      )
+      
+      # Merge survival data into ranking by sample_id
+      ranking$surv_time <- surv_lookup$surv_time[match(ranking$sample_id, surv_lookup$sample_id)]
+      ranking$surv_event <- surv_lookup$surv_event[match(ranking$sample_id, surv_lookup$sample_id)]
+      
+      log_message(sprintf("Added survival data to profile ranking: %d samples with valid time, %d with valid event",
+                          sum(!is.na(ranking$surv_time)), sum(!is.na(ranking$surv_event))))
+    } else {
+      log_message("Survival columns not found in annotation, skipping surv_time/surv_event in ranking", "WARN")
+    }
+  }
   
   # Order by confidence (descending) and assign ranks
   ranking <- ranking[order(-ranking$confidence), ]
@@ -1308,7 +1335,7 @@ run_pipeline <- function(config) {
   )
   
   # Profile ranking (consistent structure with CV script)
-  profile_ranking <- rank_profiles(results, data$y, data$sample_ids, config$top_percent)
+  profile_ranking <- rank_profiles(results, data$y, data$sample_ids, config$top_percent, annotation = annot, config = config)
   
   # Survival analysis (if time/event variables provided)
   survival_analysis <- run_survival_analysis(
