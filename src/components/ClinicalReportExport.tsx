@@ -288,6 +288,57 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 `;
       }
 
+      // Visualizations Section - ROC and KM with patient marker (MOVED ABOVE Model Performance)
+      const rocSvg = buildSingleRunROCSVG(data);
+      
+      // Determine patient risk group based on ensemble probability
+      const patientProb = patient.ensemble_probability || patient.confidence || 0;
+      const patientRiskGroup: "high" | "low" = patientProb >= 0.5 ? "high" : "low";
+      
+      // Use actual patient survival time and event data if available
+      const patientSurvTime = patient.surv_time;
+      const patientSurvEvent = patient.surv_event !== undefined ? patient.surv_event === 1 : undefined;
+      const hasPatientSurvival = patientSurvTime !== undefined && patientSurvTime > 0;
+      
+      const kmSvg = survivalData && modelSurvivalData.length > 0 
+        ? buildClinicalKMSVG(
+            data, 
+            hasPatientSurvival ? patientSurvTime : undefined, 
+            hasPatientSurvival ? patientSurvEvent : undefined, 
+            patientRiskGroup
+          ) 
+        : null;
+
+      // Survival Curves section - now above Model Performance
+      if (kmSvg) {
+        const survivalNote = hasPatientSurvival 
+          ? `Time: ${patientSurvTime.toFixed(1)}, ${patientSurvEvent ? "Event occurred" : "Censored"}`
+          : `Risk group based on ensemble probability of ${(patientProb * 100).toFixed(1)}%`;
+        html += `
+      <h2>📈 Survival Curves - Patient Risk Group: <span style="color: ${patientRiskGroup === 'high' ? '#dc2626' : '#16a34a'}; font-weight: 700;">${patientRiskGroup.toUpperCase()}</span></h2>
+      <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">${survivalNote}</p>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${kmSvg}
+      </div>
+      <div style="background: #f8f9fa; border-radius: 8px; padding: 0.75rem 1rem; margin-top: 0.75rem; display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap;">
+        <div style="font-size: 0.75rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: #dc2626; font-weight: bold;">━━</span> High Risk Group
+        </div>
+        <div style="font-size: 0.75rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: #16a34a; font-weight: bold;">━━</span> Low Risk Group
+        </div>
+        ${hasPatientSurvival ? `
+        <div style="font-size: 0.75rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-weight: bold; color: #7c3aed;">▲</span> Patient (Event Occurred)
+        </div>
+        <div style="font-size: 0.75rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-weight: bold; color: #7c3aed;">●</span> Patient (Censored)
+        </div>
+        ` : ""}
+      </div>
+`;
+      }
+
       // Model Performance Summary
       html += `
       <h2>🤖 Model Performance Summary</h2>
@@ -364,7 +415,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
         // Model Risk Score Survival
         if (modelSurvivalData.length > 0) {
           html += `
-      <h2>📈 Model Risk Score Prognostic Value</h2>
+      <h2>📊 Model Risk Score Prognostic Value</h2>
       <table>
         <thead>
           <tr>
@@ -398,48 +449,13 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
         }
       }
 
-      // Visualizations Section - ROC and KM with patient marker
-      const rocSvg = buildSingleRunROCSVG(data);
-      
-      // Determine patient risk group based on ensemble probability
-      const patientProb = patient.ensemble_probability || patient.confidence || 0;
-      const patientRiskGroup: "high" | "low" = patientProb >= 0.5 ? "high" : "low";
-      
-      // Use actual patient survival time and event data if available
-      const patientSurvTime = patient.surv_time;
-      const patientSurvEvent = patient.surv_event !== undefined ? patient.surv_event === 1 : undefined;
-      const hasPatientSurvival = patientSurvTime !== undefined && patientSurvTime > 0;
-      
-      const kmSvg = survivalData && modelSurvivalData.length > 0 
-        ? buildClinicalKMSVG(
-            data, 
-            hasPatientSurvival ? patientSurvTime : undefined, 
-            hasPatientSurvival ? patientSurvEvent : undefined, 
-            patientRiskGroup
-          ) 
-        : null;
-
+      // ROC Curves section
       html += `
-      <h2>📊 Performance Visualizations</h2>
-      <h3 style="margin-top: 1rem;">ROC Curves - All Models</h3>
+      <h2>📊 ROC Curves - All Models</h2>
       <div style="text-align: center; margin: 1rem 0;">
         ${rocSvg}
       </div>
 `;
-
-      if (kmSvg) {
-        const survivalNote = hasPatientSurvival 
-          ? `Time: ${patientSurvTime.toFixed(1)}, ${patientSurvEvent ? "Event occurred" : "Censored"}`
-          : `Risk group based on ensemble probability of ${(patientProb * 100).toFixed(1)}%`;
-        html += `
-      <h3 style="margin-top: 1.5rem;">Survival Curves - Patient Risk Group: <span style="color: ${patientRiskGroup === 'high' ? '#dc2626' : '#16a34a'}; font-weight: 700;">${patientRiskGroup.toUpperCase()}</span></h3>
-      <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">${survivalNote}</p>
-      ${hasPatientSurvival ? `<p style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.5rem;">Patient marker shown on curve: ${patientSurvEvent ? "▲ (event)" : "● (censored)"}</p>` : ""}
-      <div style="text-align: center; margin: 1rem 0;">
-        ${kmSvg}
-      </div>
-`;
-      }
 
       html += `
       <div class="footer">
