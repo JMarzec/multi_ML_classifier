@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, FileText, Loader2, User, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, ProfileRanking, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
-import { buildSingleRunROCSVG, buildClinicalKMSVG } from "@/utils/chartToSvg";
+import { buildSingleRunROCSVG, buildClinicalKMSVG, buildFeatureImportanceSVG } from "@/utils/chartToSvg";
 
 interface ClinicalReportExportProps {
   data: MLResults;
@@ -447,6 +447,19 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
       </table>
 `;
         }
+      }
+
+      // Feature Importance section
+      const hasFeatures = data.feature_importance && data.feature_importance.length > 0;
+      const featureSvg = hasFeatures ? buildFeatureImportanceSVG(data.feature_importance, 10, "Top 10 Features by Importance") : null;
+      
+      if (featureSvg) {
+        html += `
+      <h2>🔬 Feature Importance</h2>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${featureSvg}
+      </div>
+`;
       }
 
       // ROC Curves section

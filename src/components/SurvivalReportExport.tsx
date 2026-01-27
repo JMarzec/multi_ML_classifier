@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2, Heart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
-import { buildSingleRunROCSVG, buildSingleRunKMSVG } from "@/utils/chartToSvg";
+import { buildSingleRunROCSVG, buildSingleRunKMSVG, buildFeatureImportanceSVG } from "@/utils/chartToSvg";
 
 interface SurvivalReportExportProps {
   data: MLResults;
@@ -224,6 +224,8 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
     if (sections.visualizations) {
       const rocSvg = buildSingleRunROCSVG(data);
       const kmSvg = modelSurvivalData.length > 0 ? buildSingleRunKMSVG(data) : null;
+      const hasFeatures = data.feature_importance && data.feature_importance.length > 0;
+      const featureSvg = hasFeatures ? buildFeatureImportanceSVG(data.feature_importance, 15) : null;
 
       html += `
     <section>
@@ -233,6 +235,15 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
         ${rocSvg}
       </div>
 `;
+
+      if (featureSvg) {
+        html += `
+      <h3 style="margin-top: 2rem;">Feature Importance</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${featureSvg}
+      </div>
+`;
+      }
 
       if (kmSvg) {
         html += `
