@@ -1,5 +1,5 @@
 import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/types/ml-results";
-import { buildROCOverlaySVG, buildKMComparisonSVG, buildUpsetMatrixSVG } from "./chartToSvg";
+import { buildROCOverlaySVG, buildKMComparisonSVG, buildUpsetMatrixSVG, buildFeatureImportanceSVG } from "./chartToSvg";
 
 const MODEL_LABELS: Record<string, string> = {
   rf: "Random Forest",
@@ -220,6 +220,19 @@ export function buildComparisonReportHTML(runs: { name: string; data: MLResults 
     <h2>ROC Curve Comparison</h2>
     <div class="chart-container" style="text-align: center; margin: 1rem 0;">
       ${buildROCOverlaySVG(runs)}
+    </div>
+
+    <h2>Feature Importance Comparison</h2>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1rem 0;">
+      ${runs.map((run, idx) => `
+        <div class="chart-container" style="flex: 1; min-width: 280px; max-width: 500px;">
+          <div style="text-align: center; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem; color: ${idx === 0 ? "#0ea5e9" : idx === 1 ? "#6366f1" : idx === 2 ? "#10b981" : "#f59e0b"};">${runLabels[idx]}</div>
+          ${run.data.feature_importance && run.data.feature_importance.length > 0 
+            ? buildFeatureImportanceSVG(run.data.feature_importance, 10, `Top 10 Features`)
+            : '<div style="color: #64748b; text-align: center; padding: 2rem;">No feature data</div>'
+          }
+        </div>
+      `).join("")}
     </div>
 
     <h2>Survival Analysis - Kaplan-Meier Curves</h2>

@@ -699,3 +699,70 @@ export function buildClinicalKMSVG(
     ${statsText}
   </svg>`;
 }
+
+// ============================================================================
+// FEATURE IMPORTANCE BAR CHART SVG
+// ============================================================================
+
+import type { FeatureImportance } from "@/types/ml-results";
+
+export function buildFeatureImportanceSVG(
+  features: FeatureImportance[],
+  maxFeatures: number = 15,
+  title?: string
+): string {
+  const width = 520;
+  const barHeight = 22;
+  const margin = { top: 40, right: 80, bottom: 30, left: 140 };
+  
+  const sortedFeatures = [...features]
+    .sort((a, b) => b.importance - a.importance)
+    .slice(0, maxFeatures);
+  
+  const maxImportance = Math.max(...sortedFeatures.map((f) => f.importance), 0.001);
+  const plotWidth = width - margin.left - margin.right;
+  const height = margin.top + sortedFeatures.length * barHeight + margin.bottom;
+
+  const getBarColor = (index: number, total: number) => {
+    const hue = 199 - (index / Math.max(total - 1, 1)) * 50;
+    return `hsl(${hue}, 80%, 50%)`;
+  };
+
+  const bars = sortedFeatures
+    .map((feat, idx) => {
+      const normalized = (feat.importance / maxImportance) * 100;
+      const y = margin.top + idx * barHeight;
+      const barW = (normalized / 100) * plotWidth;
+      const color = getBarColor(idx, sortedFeatures.length);
+
+      return `
+        <text x="${margin.left - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" font-size="10" fill="#334155" style="font-family: monospace;">${feat.feature.length > 18 ? feat.feature.slice(0, 16) + "…" : feat.feature}</text>
+        <rect x="${margin.left}" y="${y + 3}" width="${barW}" height="${barHeight - 6}" rx="3" fill="${color}" />
+        <text x="${margin.left + barW + 6}" y="${y + barHeight / 2 + 4}" font-size="9" fill="#64748b">${normalized.toFixed(1)}%</text>
+      `;
+    })
+    .join("");
+
+  const xAxis = `<line x1="${margin.left}" y1="${margin.top + sortedFeatures.length * barHeight}" x2="${margin.left + plotWidth}" y2="${margin.top + sortedFeatures.length * barHeight}" stroke="#e5e7eb" stroke-width="1" />`;
+  
+  const xTicks = [0, 25, 50, 75, 100]
+    .map((v) => {
+      const x = margin.left + (v / 100) * plotWidth;
+      return `
+        <line x1="${x}" y1="${margin.top - 5}" x2="${x}" y2="${margin.top + sortedFeatures.length * barHeight}" stroke="#f1f5f9" stroke-width="1" />
+        <text x="${x}" y="${margin.top + sortedFeatures.length * barHeight + 15}" text-anchor="middle" font-size="9" fill="#64748b">${v}%</text>
+      `;
+    })
+    .join("");
+
+  const titleText = title || `Top ${sortedFeatures.length} Features by Importance`;
+  const titleEl = `<text x="${width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">${titleText}</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    ${titleEl}
+    ${xTicks}
+    ${xAxis}
+    ${bars}
+  </svg>`;
+}
