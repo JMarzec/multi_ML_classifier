@@ -1917,6 +1917,42 @@ compute_feature_boxplot_stats <- function(unscaled_expr, y, top_features, top_n 
   return(result)
 }
 
+#' Compute actual distributions from CV results for comparison with permuted distributions
+#' @param cv_results The cv_results object from run_cv_all_methods
+#' @return List with per-model AUROC and Accuracy distributions from actual CV folds
+compute_actual_distributions <- function(cv_results) {
+  models <- c("rf", "svm", "xgboost", "knn", "mlp", "soft_vote")
+  actual_dist <- list()
+  
+  for (model in models) {
+    if (is.null(cv_results$results[[model]])) next
+    
+    folds <- cv_results$results[[model]]
+    auroc_vals <- sapply(folds, function(f) {
+      if (is.null(f) || is.null(f$auroc) || !is.finite(f$auroc)) return(NA)
+      f$auroc
+    })
+    accuracy_vals <- sapply(folds, function(f) {
+      if (is.null(f) || is.null(f$accuracy) || !is.finite(f$accuracy)) return(NA)
+      f$accuracy
+    })
+    
+    # Remove NAs
+    auroc_vals <- auroc_vals[!is.na(auroc_vals)]
+    accuracy_vals <- accuracy_vals[!is.na(accuracy_vals)]
+    
+    if (length(auroc_vals) > 0 || length(accuracy_vals) > 0) {
+      actual_dist[[model]] <- list(
+        auroc = as.numeric(auroc_vals),
+        accuracy = as.numeric(accuracy_vals)
+      )
+    }
+  }
+  
+  if (length(actual_dist) == 0) return(NULL)
+  return(actual_dist)
+}
+
 # =============================================================================
 # SURVIVAL ANALYSIS FUNCTIONS
 # =============================================================================
@@ -2286,6 +2322,7 @@ export_to_json <- function(results, config, output_path) {
     permutation_distributions = if (!is.null(results$permutation$per_model)) {
       results$permutation$per_model
     } else NULL,
+    actual_distributions = results$actual_distributions,
     profile_ranking = if (!is.null(results$ranking)) {
       list(top_profiles = results$ranking[results$ranking$top_profile, ],
            all_rankings = results$ranking)
@@ -2496,6 +2533,9 @@ run_pipeline <- function(config) {
     selected_features = selected_features
   )
   
+  # Compute actual distributions from CV folds for comparison charts
+  actual_distributions <- compute_actual_distributions(cv_results)
+  
   # Export results
   results <- list(
     cv_summary = cv_summary,
@@ -2507,6 +2547,7 @@ run_pipeline <- function(config) {
     permutation = permutation_results,
     original_metrics = original_metrics,
     fold_metrics = cv_results$fold_metrics,
+    actual_distributions = actual_distributions,
     ranking = ranking,
     selected_features = selected_features,
     preprocessing_stats = data$preprocessing_stats,
