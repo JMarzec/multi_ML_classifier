@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2, Heart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
-import { buildSingleRunROCSVG, buildSingleRunKMSVG, buildFeatureImportanceSVG } from "@/utils/chartToSvg";
+import { buildSingleRunROCSVG, buildSingleRunKMSVG, buildFeatureImportanceSVG, buildConfusionMatrixGridSVG } from "@/utils/chartToSvg";
 
 interface SurvivalReportExportProps {
   data: MLResults;
@@ -226,6 +226,7 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
       const kmSvg = modelSurvivalData.length > 0 ? buildSingleRunKMSVG(data) : null;
       const hasFeatures = data.feature_importance && data.feature_importance.length > 0;
       const featureSvg = hasFeatures ? buildFeatureImportanceSVG(data.feature_importance, 15) : null;
+      const confusionSvg = buildConfusionMatrixGridSVG(data);
 
       html += `
     <section>
@@ -233,6 +234,11 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
       <h3 style="margin-top: 1rem;">ROC Curves - All Models</h3>
       <div style="text-align: center; margin: 1rem 0;">
         ${rocSvg}
+      </div>
+
+      <h3 style="margin-top: 2rem;">Confusion Matrices</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${confusionSvg}
       </div>
 `;
 

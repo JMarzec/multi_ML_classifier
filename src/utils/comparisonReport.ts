@@ -1,5 +1,5 @@
 import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/types/ml-results";
-import { buildROCOverlaySVG, buildKMComparisonSVG, buildUpsetMatrixSVG, buildFeatureImportanceSVG } from "./chartToSvg";
+import { buildROCOverlaySVG, buildKMComparisonSVG, buildUpsetMatrixSVG, buildFeatureImportanceSVG, buildConfusionMatrixSVG } from "./chartToSvg";
 
 const MODEL_LABELS: Record<string, string> = {
   rf: "Random Forest",
@@ -220,6 +220,19 @@ export function buildComparisonReportHTML(runs: { name: string; data: MLResults 
     <h2>ROC Curve Comparison</h2>
     <div class="chart-container" style="text-align: center; margin: 1rem 0;">
       ${buildROCOverlaySVG(runs)}
+    </div>
+
+    <h2>Confusion Matrix Comparison (Soft Voting)</h2>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1rem 0;">
+      ${runs.map((run, idx) => {
+        const cm = run.data.model_performance.soft_vote?.confusion_matrix;
+        return `
+        <div style="flex: 0 0 auto;">
+          <div style="text-align: center; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem; color: ${idx === 0 ? "#0ea5e9" : idx === 1 ? "#6366f1" : idx === 2 ? "#10b981" : "#f59e0b"};">${runLabels[idx]}</div>
+          ${cm ? buildConfusionMatrixSVG(cm.tp, cm.tn, cm.fp, cm.fn, "Soft Vote") : '<div style="color: #64748b; text-align: center; padding: 2rem;">No data</div>'}
+        </div>
+      `;
+      }).join("")}
     </div>
 
     <h2>Feature Importance Comparison</h2>

@@ -341,6 +341,208 @@ export function buildUpsetMatrixSVG(runs: { name: string; data: MLResults }[]): 
 }
 
 // ============================================================================
+// CONFUSION MATRIX HEATMAP SVG
+// ============================================================================
+
+export function buildConfusionMatrixSVG(
+  tp: number,
+  tn: number,
+  fp: number,
+  fn: number,
+  modelName: string = "Model"
+): string {
+  const width = 320;
+  const height = 320;
+  const margin = { top: 50, right: 30, bottom: 60, left: 80 };
+  const cellSize = 100;
+  const matrixStartX = margin.left;
+  const matrixStartY = margin.top;
+
+  // Calculate derived metrics
+  const total = tp + tn + fp + fn;
+  const accuracy = total > 0 ? ((tp + tn) / total * 100).toFixed(1) : "N/A";
+  const sensitivity = (tp + fn) > 0 ? (tp / (tp + fn) * 100).toFixed(1) : "N/A";
+  const specificity = (tn + fp) > 0 ? (tn / (tn + fp) * 100).toFixed(1) : "N/A";
+  const precision = (tp + fp) > 0 ? (tp / (tp + fp) * 100).toFixed(1) : "N/A";
+
+  // Color scale (green for correct, red for errors)
+  const maxVal = Math.max(tp, tn, fp, fn, 1);
+  const getColor = (val: number, isCorrect: boolean) => {
+    const intensity = Math.min(val / maxVal, 1);
+    if (isCorrect) {
+      // Green gradient for TP/TN
+      const r = Math.round(220 - intensity * 180);
+      const g = Math.round(252 - intensity * 32);
+      const b = Math.round(220 - intensity * 140);
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      // Red gradient for FP/FN
+      const r = Math.round(254 - intensity * 20);
+      const g = Math.round(226 - intensity * 140);
+      const b = Math.round(226 - intensity * 140);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  };
+
+  // Matrix cells: [row][col] where row=Predicted, col=Actual
+  // Layout:        Actual Neg | Actual Pos
+  // Predicted Neg:    TN      |    FN
+  // Predicted Pos:    FP      |    TP
+  const cells = [
+    { x: 0, y: 0, val: tn, label: "TN", isCorrect: true },
+    { x: 1, y: 0, val: fn, label: "FN", isCorrect: false },
+    { x: 0, y: 1, val: fp, label: "FP", isCorrect: false },
+    { x: 1, y: 1, val: tp, label: "TP", isCorrect: true },
+  ];
+
+  const cellsEl = cells.map((cell) => {
+    const cx = matrixStartX + cell.x * cellSize + cellSize / 2;
+    const cy = matrixStartY + cell.y * cellSize + cellSize / 2;
+    const color = getColor(cell.val, cell.isCorrect);
+    const textColor = cell.val / maxVal > 0.5 ? "#1e293b" : "#475569";
+    
+    return `
+      <rect x="${matrixStartX + cell.x * cellSize}" y="${matrixStartY + cell.y * cellSize}" 
+            width="${cellSize}" height="${cellSize}" 
+            fill="${color}" stroke="#e2e8f0" stroke-width="1" />
+      <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="11" fill="#64748b">${cell.label}</text>
+      <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="16" font-weight="600" fill="${textColor}">${cell.val}</text>
+    `;
+  }).join("");
+
+  // Axis labels
+  const axisLabels = `
+    <text x="${matrixStartX + cellSize}" y="${margin.top - 25}" text-anchor="middle" font-size="11" font-weight="600" fill="#475569">Actual Class</text>
+    <text x="${matrixStartX + cellSize / 2}" y="${margin.top - 8}" text-anchor="middle" font-size="10" fill="#64748b">Negative</text>
+    <text x="${matrixStartX + cellSize * 1.5}" y="${margin.top - 8}" text-anchor="middle" font-size="10" fill="#64748b">Positive</text>
+    <text x="${margin.left - 35}" y="${matrixStartY + cellSize}" text-anchor="middle" font-size="11" font-weight="600" fill="#475569" transform="rotate(-90 ${margin.left - 35} ${matrixStartY + cellSize})">Predicted</text>
+    <text x="${margin.left - 8}" y="${matrixStartY + cellSize / 2 + 4}" text-anchor="end" font-size="10" fill="#64748b">Neg</text>
+    <text x="${margin.left - 8}" y="${matrixStartY + cellSize * 1.5 + 4}" text-anchor="end" font-size="10" fill="#64748b">Pos</text>
+  `;
+
+  // Metrics summary below matrix
+  const metricsY = matrixStartY + cellSize * 2 + 20;
+  const metricsEl = `
+    <text x="${matrixStartX}" y="${metricsY}" font-size="9" fill="#475569">
+      <tspan font-weight="600">Acc:</tspan> ${accuracy}%  
+      <tspan font-weight="600" dx="8">Sens:</tspan> ${sensitivity}%  
+      <tspan font-weight="600" dx="8">Spec:</tspan> ${specificity}%  
+      <tspan font-weight="600" dx="8">Prec:</tspan> ${precision}%
+    </text>
+  `;
+
+  const title = `<text x="${width / 2}" y="20" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">${modelName} - Confusion Matrix</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    ${title}
+    ${cellsEl}
+    ${axisLabels}
+    ${metricsEl}
+  </svg>`;
+}
+
+// Build multi-model confusion matrix grid SVG
+export function buildConfusionMatrixGridSVG(data: MLResults, modelsToShow?: string[]): string {
+  const MODEL_LABELS: Record<string, string> = {
+    rf: "Random Forest",
+    svm: "SVM",
+    xgboost: "XGBoost",
+    knn: "KNN",
+    mlp: "MLP",
+    hard_vote: "Hard Voting",
+    soft_vote: "Soft Voting",
+  };
+
+  const models = modelsToShow || Object.keys(data.model_performance).filter(
+    (m) => data.model_performance[m as keyof typeof data.model_performance]?.confusion_matrix
+  );
+
+  const validModels = models.filter((m) => {
+    const cm = data.model_performance[m as keyof typeof data.model_performance]?.confusion_matrix;
+    return cm && (cm.tp !== undefined || cm.tn !== undefined);
+  });
+
+  if (validModels.length === 0) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100" viewBox="0 0 400 100">
+      <rect width="400" height="100" fill="white" />
+      <text x="200" y="55" text-anchor="middle" font-size="12" fill="#64748b">No confusion matrix data available</text>
+    </svg>`;
+  }
+
+  const cellWidth = 180;
+  const cellHeight = 200;
+  const cols = Math.min(validModels.length, 3);
+  const rows = Math.ceil(validModels.length / cols);
+  const width = cols * cellWidth + 40;
+  const height = rows * cellHeight + 60;
+
+  const miniMatrices = validModels.map((model, idx) => {
+    const cm = data.model_performance[model as keyof typeof data.model_performance]!.confusion_matrix!;
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const offsetX = 20 + col * cellWidth;
+    const offsetY = 40 + row * cellHeight;
+    
+    return buildMiniConfusionMatrix(
+      cm.tp, cm.tn, cm.fp, cm.fn,
+      MODEL_LABELS[model] || model,
+      offsetX, offsetY
+    );
+  }).join("");
+
+  const title = `<text x="${width / 2}" y="22" text-anchor="middle" font-size="14" font-weight="600" fill="#1e293b">Confusion Matrix Comparison</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    ${title}
+    ${miniMatrices}
+  </svg>`;
+}
+
+function buildMiniConfusionMatrix(tp: number, tn: number, fp: number, fn: number, label: string, offsetX: number, offsetY: number): string {
+  const cellSize = 55;
+  const total = tp + tn + fp + fn;
+  const maxVal = Math.max(tp, tn, fp, fn, 1);
+
+  const getColor = (val: number, isCorrect: boolean) => {
+    const intensity = Math.min(val / maxVal, 1);
+    if (isCorrect) {
+      return `rgb(${Math.round(220 - intensity * 180)}, ${Math.round(252 - intensity * 32)}, ${Math.round(220 - intensity * 140)})`;
+    } else {
+      return `rgb(${Math.round(254 - intensity * 20)}, ${Math.round(226 - intensity * 140)}, ${Math.round(226 - intensity * 140)})`;
+    }
+  };
+
+  const cells = [
+    { x: 0, y: 0, val: tn, abbr: "TN", isCorrect: true },
+    { x: 1, y: 0, val: fn, abbr: "FN", isCorrect: false },
+    { x: 0, y: 1, val: fp, abbr: "FP", isCorrect: false },
+    { x: 1, y: 1, val: tp, abbr: "TP", isCorrect: true },
+  ];
+
+  const cellsEl = cells.map((c) => {
+    const cx = offsetX + 30 + c.x * cellSize + cellSize / 2;
+    const cy = offsetY + 25 + c.y * cellSize + cellSize / 2;
+    return `
+      <rect x="${offsetX + 30 + c.x * cellSize}" y="${offsetY + 25 + c.y * cellSize}" 
+            width="${cellSize}" height="${cellSize}" 
+            fill="${getColor(c.val, c.isCorrect)}" stroke="#e2e8f0" stroke-width="1" />
+      <text x="${cx}" y="${cy - 5}" text-anchor="middle" font-size="8" fill="#64748b">${c.abbr}</text>
+      <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">${c.val}</text>
+    `;
+  }).join("");
+
+  const accuracy = total > 0 ? ((tp + tn) / total * 100).toFixed(0) : "N/A";
+  
+  return `
+    <text x="${offsetX + 30 + cellSize}" y="${offsetY + 15}" text-anchor="middle" font-size="10" font-weight="600" fill="#334155">${label}</text>
+    ${cellsEl}
+    <text x="${offsetX + 30 + cellSize}" y="${offsetY + 25 + cellSize * 2 + 15}" text-anchor="middle" font-size="9" fill="#475569">Accuracy: ${accuracy}%</text>
+  `;
+}
+
+// ============================================================================
 // SINGLE-RUN SVG BUILDERS
 // ============================================================================
 

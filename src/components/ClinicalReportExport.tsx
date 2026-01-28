@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, FileText, Loader2, User, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, ProfileRanking, PerGeneSurvival, ModelRiskScoreSurvival } from "@/types/ml-results";
-import { buildSingleRunROCSVG, buildClinicalKMSVG, buildFeatureImportanceSVG } from "@/utils/chartToSvg";
+import { buildSingleRunROCSVG, buildClinicalKMSVG, buildFeatureImportanceSVG, buildConfusionMatrixSVG } from "@/utils/chartToSvg";
 
 interface ClinicalReportExportProps {
   data: MLResults;
@@ -458,6 +458,21 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
       <h2>🔬 Feature Importance</h2>
       <div style="text-align: center; margin: 1rem 0;">
         ${featureSvg}
+      </div>
+`;
+      }
+
+      // Confusion Matrix for best model
+      const softVoteCM = data.model_performance.soft_vote?.confusion_matrix;
+      const confusionSvg = softVoteCM 
+        ? buildConfusionMatrixSVG(softVoteCM.tp, softVoteCM.tn, softVoteCM.fp, softVoteCM.fn, "Soft Voting Ensemble")
+        : null;
+
+      if (confusionSvg) {
+        html += `
+      <h2>🎯 Classification Confusion Matrix</h2>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${confusionSvg}
       </div>
 `;
       }

@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { MLResults, PermutationMetric } from "@/types/ml-results";
-import { buildSingleRunROCSVG, buildSingleRunKMSVG, buildFeatureImportanceSVG } from "@/utils/chartToSvg";
+import { buildSingleRunROCSVG, buildSingleRunKMSVG, buildFeatureImportanceSVG, buildConfusionMatrixGridSVG } from "@/utils/chartToSvg";
 
 interface ReportExportProps {
   data: MLResults;
@@ -209,6 +209,7 @@ export function ReportExport({ data }: ReportExportProps) {
       const kmSvg = hasSurvival ? buildSingleRunKMSVG(data) : null;
       const hasFeatures = data.feature_importance && data.feature_importance.length > 0;
       const featureSvg = hasFeatures ? buildFeatureImportanceSVG(data.feature_importance, 15) : null;
+      const confusionSvg = buildConfusionMatrixGridSVG(data);
 
       html += `
     <section class="section">
@@ -216,6 +217,11 @@ export function ReportExport({ data }: ReportExportProps) {
       <h3>ROC Curves</h3>
       <div style="text-align: center; margin: 1rem 0;">
         ${rocSvg}
+      </div>
+
+      <h3 style="margin-top: 2rem;">Confusion Matrices</h3>
+      <div style="text-align: center; margin: 1rem 0;">
+        ${confusionSvg}
       </div>
 `;
 
