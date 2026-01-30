@@ -6,7 +6,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ComparisonUploader } from "@/components/ComparisonUploader";
 import { ComparisonDashboard } from "@/components/ComparisonDashboard";
 import { DemoDataDownload } from "@/components/DemoDataDownload";
-import { Brain, Download, FileCode2, Sparkles, Play, GitCompare, Plus } from "lucide-react";
+import { Brain, Download, FileCode2, Sparkles, Play, GitCompare, Plus, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import accelBioLogo from "@/assets/accelbio-logo.png";
 import type { MLResults } from "@/types/ml-results";
 import { demoData } from "@/data/demoData";
@@ -117,26 +118,54 @@ const Index = () => {
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 mb-12">
-            <div className="flex gap-2">
-              <a href="/scripts/multi_ML_classifier.R" download="multi_ML_classifier.R">
-                <Button size="lg" className="gap-2 glow-primary flex-col h-auto py-3">
-                  <span className="flex items-center gap-2">
-                    <Download className="w-5 h-5" />
-                    CV Script
-                  </span>
-                  <span className="text-xs opacity-70 font-normal">Cross-validation mode</span>
-                </Button>
-              </a>
-              <a href="/scripts/multi_ML_classifier_full_training.R" download="multi_ML_classifier_full_training.R">
-                <Button size="lg" variant="secondary" className="gap-2 flex-col h-auto py-3">
-                  <span className="flex items-center gap-2">
-                    <Download className="w-5 h-5" />
-                    Full Training Script
-                  </span>
-                  <span className="text-xs opacity-70 font-normal">Train on 100% data</span>
-                </Button>
-              </a>
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <a href="/scripts/multi_ML_classifier.R" download="multi_ML_classifier.R">
+                    <Button size="lg" className="gap-2 glow-primary flex-col h-auto py-3 pr-8">
+                      <span className="flex items-center gap-2">
+                        <Download className="w-5 h-5" />
+                        CV Script
+                      </span>
+                      <span className="text-xs opacity-70 font-normal">Cross-validation mode</span>
+                    </Button>
+                  </a>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="absolute top-1 right-1 p-1 rounded-full hover:bg-white/20 transition-colors">
+                        <Info className="w-4 h-4 opacity-70" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs text-left">
+                      <p className="font-semibold mb-1">Cross-Validation Mode</p>
+                      <p className="text-xs">Use for model evaluation and performance estimation. Splits data into folds to assess generalization. Best for: comparing methods, feature selection stability, and publishing results.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="relative">
+                  <a href="/scripts/multi_ML_classifier_full_training.R" download="multi_ML_classifier_full_training.R">
+                    <Button size="lg" variant="secondary" className="gap-2 flex-col h-auto py-3 pr-8">
+                      <span className="flex items-center gap-2">
+                        <Download className="w-5 h-5" />
+                        Full Training Script
+                      </span>
+                      <span className="text-xs opacity-70 font-normal">Train on 100% data</span>
+                    </Button>
+                  </a>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="absolute top-1 right-1 p-1 rounded-full hover:bg-foreground/10 transition-colors">
+                        <Info className="w-4 h-4 opacity-70" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs text-left">
+                      <p className="font-semibold mb-1">Full Training Mode</p>
+                      <p className="text-xs">Use for final model deployment. Trains on 100% of data to maximize predictive power. Best for: clinical application, predicting new samples, and exporting production models.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+            </TooltipProvider>
             <Button size="lg" variant="secondary" className="gap-2" onClick={() => { setData(demoData); setViewMode("single"); }}>
               <Play className="w-5 h-5" />
               Try Demo
