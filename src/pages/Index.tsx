@@ -117,12 +117,26 @@ const Index = () => {
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 mb-12">
-            <a href="/intelligenes_ml_classifier.R" download>
-              <Button size="lg" className="gap-2 glow-primary">
-                <Download className="w-5 h-5" />
-                Download R Script
-              </Button>
-            </a>
+            <div className="flex gap-2">
+              <a href="/scripts/multi_ML_classifier.R" download="multi_ML_classifier.R">
+                <Button size="lg" className="gap-2 glow-primary flex-col h-auto py-3">
+                  <span className="flex items-center gap-2">
+                    <Download className="w-5 h-5" />
+                    CV Script
+                  </span>
+                  <span className="text-xs opacity-70 font-normal">Cross-validation mode</span>
+                </Button>
+              </a>
+              <a href="/scripts/multi_ML_classifier_full_training.R" download="multi_ML_classifier_full_training.R">
+                <Button size="lg" variant="secondary" className="gap-2 flex-col h-auto py-3">
+                  <span className="flex items-center gap-2">
+                    <Download className="w-5 h-5" />
+                    Full Training Script
+                  </span>
+                  <span className="text-xs opacity-70 font-normal">Train on 100% data</span>
+                </Button>
+              </a>
+            </div>
             <Button size="lg" variant="secondary" className="gap-2" onClick={() => { setData(demoData); setViewMode("single"); }}>
               <Play className="w-5 h-5" />
               Try Demo

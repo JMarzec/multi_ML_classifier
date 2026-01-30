@@ -44,10 +44,10 @@ interface ForestPlotEntry {
 }
 
 const ForestPlotSVG = ({ data }: { data: ForestPlotEntry[] }) => {
-  const width = 800;
+  const width = 900;
   const rowHeight = 22;
-  const height = Math.max(400, data.length * rowHeight + 80);
-  const margin = { top: 40, right: 100, left: 140, bottom: 40 };
+  const height = Math.max(400, data.length * rowHeight + 100);
+  const margin = { top: 40, right: 180, left: 140, bottom: 60 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
 
@@ -237,20 +237,12 @@ const ForestPlotSVG = ({ data }: { data: ForestPlotEntry[] }) => {
               </text>
             </g>
           ))}
-          <text
-            x={plotWidth / 2}
-            y={35}
-            textAnchor="middle"
-            className="text-sm fill-muted-foreground font-medium"
-          >
-            Hazard Ratio (log scale)
-          </text>
         </g>
 
-        {/* Labels for risk interpretation */}
+        {/* Labels for risk interpretation - positioned above axis label */}
         <text
           x={hrOnePosition / 2}
-          y={plotHeight + 35}
+          y={plotHeight + 25}
           textAnchor="middle"
           className="text-xs fill-success font-medium"
         >
@@ -258,11 +250,21 @@ const ForestPlotSVG = ({ data }: { data: ForestPlotEntry[] }) => {
         </text>
         <text
           x={hrOnePosition + (plotWidth - hrOnePosition) / 2}
-          y={plotHeight + 35}
+          y={plotHeight + 25}
           textAnchor="middle"
           className="text-xs fill-destructive font-medium"
         >
           Risk →
+        </text>
+
+        {/* X-axis label - positioned below risk labels */}
+        <text
+          x={plotWidth / 2}
+          y={plotHeight + 50}
+          textAnchor="middle"
+          className="text-sm fill-muted-foreground font-medium"
+        >
+          Hazard Ratio (log scale)
         </text>
       </g>
 
