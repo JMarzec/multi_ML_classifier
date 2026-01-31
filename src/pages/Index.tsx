@@ -244,52 +244,64 @@ const Index = () => {
               <div className="p-4 font-medium bg-primary/10 border-b border-border text-center">Cross-Validation</div>
               <div className="p-4 font-medium bg-secondary/10 border-b border-border text-center">Full Training</div>
               
-              <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
-                <Database className="w-4 h-4" />
-                Data Usage
+              <div className="contents group [&>div]:transition-colors [&>div]:duration-200 hover:[&>div]:bg-muted/50">
+                <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
+                  <Database className="w-4 h-4" />
+                  Data Usage
+                </div>
+                <div className="p-4 border-b border-border text-center">K-fold splits (e.g., 80/20)</div>
+                <div className="p-4 border-b border-border text-center">100% of samples</div>
               </div>
-              <div className="p-4 border-b border-border text-center">K-fold splits (e.g., 80/20)</div>
-              <div className="p-4 border-b border-border text-center">100% of samples</div>
               
-              <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
-                <Target className="w-4 h-4" />
-                Primary Purpose
+              <div className="contents group [&>div]:transition-colors [&>div]:duration-200 hover:[&>div]:bg-muted/50">
+                <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Primary Purpose
+                </div>
+                <div className="p-4 border-b border-border text-center">Performance estimation</div>
+                <div className="p-4 border-b border-border text-center">Final model deployment</div>
               </div>
-              <div className="p-4 border-b border-border text-center">Performance estimation</div>
-              <div className="p-4 border-b border-border text-center">Final model deployment</div>
               
-              <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
-                <BarChart3 className="w-4 h-4" />
-                Metrics Provided
+              <div className="contents group [&>div]:transition-colors [&>div]:duration-200 hover:[&>div]:bg-muted/50">
+                <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" />
+                  Metrics Provided
+                </div>
+                <div className="p-4 border-b border-border text-center">Mean ± SD across folds</div>
+                <div className="p-4 border-b border-border text-center">Single training metrics</div>
               </div>
-              <div className="p-4 border-b border-border text-center">Mean ± SD across folds</div>
-              <div className="p-4 border-b border-border text-center">Single training metrics</div>
               
-              <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
-                <Layers className="w-4 h-4" />
-                Feature Stability
+              <div className="contents group [&>div]:transition-colors [&>div]:duration-200 hover:[&>div]:bg-muted/50">
+                <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
+                  <Layers className="w-4 h-4" />
+                  Feature Stability
+                </div>
+                <div className="p-4 border-b border-border text-center">Per-fold selection counts</div>
+                <div className="p-4 border-b border-border text-center">Single feature set</div>
               </div>
-              <div className="p-4 border-b border-border text-center">Per-fold selection counts</div>
-              <div className="p-4 border-b border-border text-center">Single feature set</div>
               
-              <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
-                <Beaker className="w-4 h-4" />
-                Best For
+              <div className="contents group [&>div]:transition-colors [&>div]:duration-200 hover:[&>div]:bg-muted/50">
+                <div className="p-4 border-b border-border text-muted-foreground flex items-center gap-2">
+                  <Beaker className="w-4 h-4" />
+                  Best For
+                </div>
+                <div className="p-4 border-b border-border text-center">Research & publication</div>
+                <div className="p-4 border-b border-border text-center">Clinical application</div>
               </div>
-              <div className="p-4 border-b border-border text-center">Research & publication</div>
-              <div className="p-4 border-b border-border text-center">Clinical application</div>
               
-              <div className="p-4 text-muted-foreground flex items-center gap-2">
-                <UserPlus className="w-4 h-4" />
-                New Sample Prediction
-              </div>
-              <div className="p-4 text-center flex items-center justify-center gap-1 text-muted-foreground">
-                <X className="w-4 h-4" />
-                Not recommended
-              </div>
-              <div className="p-4 text-center flex items-center justify-center gap-1 font-medium text-primary">
-                <Check className="w-4 h-4" />
-                Recommended
+              <div className="contents group [&>div]:transition-colors [&>div]:duration-200 hover:[&>div]:bg-muted/50">
+                <div className="p-4 text-muted-foreground flex items-center gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  New Sample Prediction
+                </div>
+                <div className="p-4 text-center flex items-center justify-center gap-1 text-muted-foreground">
+                  <X className="w-4 h-4" />
+                  Not recommended
+                </div>
+                <div className="p-4 text-center flex items-center justify-center gap-1 font-medium text-primary">
+                  <Check className="w-4 h-4" />
+                  Recommended
+                </div>
               </div>
             </div>
           </div>
