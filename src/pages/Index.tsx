@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ComparisonUploader } from "@/components/ComparisonUploader";
 import { ComparisonDashboard } from "@/components/ComparisonDashboard";
 import { DemoDataDownload } from "@/components/DemoDataDownload";
-import { Brain, Download, FileCode2, Sparkles, Play, GitCompare, Plus, Info, Database, Target, BarChart3, Layers, Beaker, FlaskConical, UserPlus, Check, X } from "lucide-react";
+import { Brain, Download, FileCode2, Sparkles, Play, GitCompare, Plus, Info, Database, Target, BarChart3, Layers, Beaker, UserPlus, Check, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import accelBioLogo from "@/assets/accelbio-logo.png";
 import type { MLResults } from "@/types/ml-results";
