@@ -381,7 +381,7 @@ load_and_preprocess_data <- function(config) {
   
   preprocessing_stats <- list(
     original_samples = length(sample_ids),
-    original_features = nrow(expr_mat),
+    original_features = ncol(X_raw),
     missing_values = 0,
     missing_pct = 0,
     class_distribution = class_dist_list,
