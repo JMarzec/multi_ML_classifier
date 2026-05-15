@@ -1,0 +1,13 @@
+# multi-ML-classifier
+
+> Interactive dashboard for visualizing results from a multi-method machine learning classification pipeline (Random Forest, SVM, XGBoost, KNN, MLP) with permutation testing, feature selection, and profile ranking for diagnostic and prognostic predictions.
+
+The project provides two downloadable R scripts (cross-validation and full-training modes) and a web dashboard that loads the resulting JSON to visualize model performance, feature importance, ROC curves, confusion matrices, calibration, survival analysis, and side-by-side comparisons of multiple runs.
+
+## Pages
+
+- [Home](/): Upload JSON results, try a demo, compare multiple runs, and download the R scripts.
+
+## Optional
+
+- [AccelBio](https://accelbio.pt/): Organization behind the project.
