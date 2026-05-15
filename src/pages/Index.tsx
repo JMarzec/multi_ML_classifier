@@ -106,7 +106,7 @@ const Index = () => {
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-secondary/5 rounded-full blur-[100px]" />
       </div>
 
-      <div className="relative z-10 container mx-auto px-4 py-16">
+      <main className="relative z-10 container mx-auto px-4 py-16">
         <div className="text-center max-w-4xl mx-auto mb-16">
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
             <span className="gradient-text">Multi-Method ML</span>
@@ -351,7 +351,7 @@ const Index = () => {
             <a href="https://accelbio.pt/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">AccelBio</a>
           </p>
         </footer>
-      </div>
+      </main>
     </div>
   );
 };
