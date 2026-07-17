@@ -15,7 +15,7 @@ export default defineTool({
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ json }) => {
     const { validateMLResultsSchema, formatValidationMessages } = await import(
-      "@/utils/jsonSchemaValidator"
+      "../../../utils/jsonSchemaValidator"
     );
     let parsed: unknown;
     try {
