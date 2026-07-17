@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "sdk_version": "0.23.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "multi-ml-classifier-mcp",
+      "version": "0.1.0",
+      "title": "Multi-ML Classifier MCP"
+    },
+    "tools": [
+      {
+        "name": "validate_ml_results_json",
+        "title": "Validate ML results JSON",
+        "description": "Validate a multi-ML-classifier results JSON payload against the dashboard's expected schema. Returns whether it is valid plus any errors and warnings by field.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "json": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Full ML results JSON as a string. Must parse as a JSON object."
+            }
+          },
+          "required": [
+            "json"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "summarize_ml_run",
+        "title": "Summarize ML run",
+        "description": "Summarize a multi-ML-classifier results JSON: run metadata, preprocessing stats, per-model mean AUROC/accuracy/F1, top-N selected features, and best model.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "json": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Full ML results JSON as a string."
+            },
+            "top_features": {
+              "description": "How many top selected features to include (default 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          "required": [
+            "json"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "compare_ml_runs",
+        "title": "Compare two ML runs",
+        "description": "Compare two multi-ML-classifier results JSON payloads (run A vs run B). Reports per-model metric deltas (AUROC/Accuracy/F1) and selected-feature overlap.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "json_a": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Run A: full ML results JSON as a string."
+            },
+            "json_b": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Run B: full ML results JSON as a string."
+            },
+            "label_a": {
+              "description": "Optional label for run A (default 'A').",
+              "type": "string"
+            },
+            "label_b": {
+              "description": "Optional label for run B (default 'B').",
+              "type": "string"
+            }
+          },
+          "required": [
+            "json_a",
+            "json_b"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
