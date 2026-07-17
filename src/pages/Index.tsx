@@ -346,6 +346,9 @@ const Index = () => {
         </div>
 
         <footer className="mt-20 pt-8 border-t border-border text-center text-sm text-muted-foreground">
+          <p className="mb-2">
+            <a href="/connect" className="text-primary hover:underline font-medium">Connect an AI assistant</a>
+          </p>
           <p>
             Multi-Method ML Classifier • Powered by{" "}
             <a href="https://accelbio.pt/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">AccelBio</a>

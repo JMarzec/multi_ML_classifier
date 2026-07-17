@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/useTheme";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import Connect from "./pages/Connect";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +19,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/connect" element={<Connect />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
