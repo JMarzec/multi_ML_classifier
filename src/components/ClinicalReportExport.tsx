@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/utils/escapeHtml";
 import { toFiniteNumber, formatPValue, formatNumber, normalizePerGene, normalizeModelRiskScores , patientRiskCohort } from "@/utils/analytics";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -190,7 +191,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
     <div class="report-card">
       <div class="header">
         <div>
-          <div class="patient-id">🏥 Patient: ${patientId}</div>
+          <div class="patient-id">🏥 Patient: ${escapeHtml(patientId)}</div>
           <div class="timestamp">Report generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}</div>
         </div>
         <div>
@@ -209,11 +210,11 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
       <div class="grid">
         <div class="metric-card">
           <div class="metric-label">Actual Class</div>
-          <div class="metric-value">${patient.actual_class}</div>
+          <div class="metric-value">${escapeHtml(patient.actual_class)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Predicted Class</div>
-          <div class="metric-value ${patient.predicted_class === patient.actual_class ? "negative" : "positive"}">${patient.predicted_class}</div>
+          <div class="metric-value ${patient.predicted_class === patient.actual_class ? "negative" : "positive"}">${escapeHtml(patient.predicted_class)}</div>
         </div>
       </div>
 
@@ -227,7 +228,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
         </div>
         <div class="metric-card">
           <div class="metric-label">Profile Rank</div>
-          <div class="metric-value">#${patient.rank}</div>
+          <div class="metric-value">#${escapeHtml(patient.rank)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Top Profile</div>
@@ -331,7 +332,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
           const isBest = bestModel && model === bestModel[0];
           html += `
           <tr ${isBest ? 'style="background: #f0fdf4; font-weight: 600;"' : ""}>
-            <td>${modelLabels[model] || model}${isBest ? " ★" : ""}</td>
+            <td>${escapeHtml(modelLabels[model] || model)}${isBest ? " ★" : ""}</td>
             <td class="mono" style="text-align: right;">${metrics?.auroc ? formatPercent(metrics.auroc.mean) : "NA"}</td>
             <td class="mono" style="text-align: right;">${metrics?.accuracy ? formatPercent(metrics.accuracy.mean) : "NA"}</td>
             <td class="mono" style="text-align: right;">${metrics?.sensitivity ? formatPercent(metrics.sensitivity.mean) : "NA"}</td>
@@ -368,7 +369,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
           const isRisk = Number.isFinite(gene.cox_hr) && gene.cox_hr > 1;
           html += `
           <tr>
-            <td class="mono">${gene.gene}</td>
+            <td class="mono">${escapeHtml(gene.gene)}</td>
             <td class="mono" style="text-align: right;">${formatNumber(gene.cox_hr)}</td>
             <td class="mono" style="text-align: right; color: #6b7280;">(${formatNumber(gene.cox_hr_lower, 2)} - ${formatNumber(gene.cox_hr_upper, 2)})</td>
             <td class="mono" style="text-align: right;">${formatPValue(gene.cox_p)}</td>
@@ -404,7 +405,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
             const isPrognostic = coxP != null && coxP < 0.05;
             html += `
           <tr>
-            <td style="font-weight: 600;">${(model.model || "").toUpperCase()}</td>
+            <td style="font-weight: 600;">${escapeHtml((model.model || "").toUpperCase())}</td>
             <td class="mono" style="text-align: right;">${formatNumber(stats.cox_hr)}</td>
             <td class="mono" style="text-align: right;">${formatPValue(stats.cox_p)}</td>
             <td style="text-align: center;"><span class="badge" style="background: ${isPrognostic ? "#d1fae5" : "#f3f4f6"}; color: ${isPrognostic ? "#065f46" : "#6b7280"};">${isPrognostic ? "Yes" : "No"}</span></td>

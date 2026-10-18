@@ -1,3 +1,4 @@
+import { escapeHtml } from "./escapeHtml";
 import { toFiniteNumber, normalizeModelRiskScores } from "@/utils/analytics";
 import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/types/ml-results";
 
@@ -193,7 +194,7 @@ export function buildKMComparisonSVG(runs: { name: string; data: MLResults }[], 
   const xTicks = [0, 0.25, 0.5, 0.75, 1].map((v) => {
     const x = margin.left + v * plotWidth;
     const label = (v * maxTime).toFixed(0);
-    return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`;
+    return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${escapeHtml(label)}</text>`;
   }).join("");
 
   const yTicks = [0, 25, 50, 75, 100].map((v) => {
@@ -394,7 +395,7 @@ export function buildConfusionMatrixSVG(
             width="${cellSize}" height="${cellSize}" 
             fill="${color}" stroke="#e2e8f0" stroke-width="1" />
       <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="11" fill="#64748b">${cell.label}</text>
-      <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="16" font-weight="600" fill="${textColor}">${cell.val}</text>
+      <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="16" font-weight="600" fill="${textColor}">${escapeHtml(cell.val)}</text>
     `;
   }).join("");
 
@@ -419,7 +420,7 @@ export function buildConfusionMatrixSVG(
     </text>
   `;
 
-  const title = `<text x="${width / 2}" y="20" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">${modelName} - Confusion Matrix</text>`;
+  const title = `<text x="${width / 2}" y="20" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">${escapeHtml(modelName)} - Confusion Matrix</text>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" fill="white" />
@@ -518,14 +519,14 @@ function buildMiniConfusionMatrix(tp: number, tn: number, fp: number, fn: number
             width="${cellSize}" height="${cellSize}" 
             fill="${getColor(c.val, c.isCorrect)}" stroke="#e2e8f0" stroke-width="1" />
       <text x="${cx}" y="${cy - 5}" text-anchor="middle" font-size="8" fill="#64748b">${c.abbr}</text>
-      <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">${c.val}</text>
+      <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">${escapeHtml(c.val)}</text>
     `;
   }).join("");
 
   const accuracy = total > 0 ? ((tp + tn) / total * 100).toFixed(0) : "N/A";
   
   return `
-    <text x="${offsetX + 30 + cellSize}" y="${offsetY + 15}" text-anchor="middle" font-size="10" font-weight="600" fill="#334155">${label}</text>
+    <text x="${offsetX + 30 + cellSize}" y="${offsetY + 15}" text-anchor="middle" font-size="10" font-weight="600" fill="#334155">${escapeHtml(label)}</text>
     ${cellsEl}
     <text x="${offsetX + 30 + cellSize}" y="${offsetY + 25 + cellSize * 2 + 15}" text-anchor="middle" font-size="9" fill="#475569">Accuracy: ${accuracy}%</text>
   `;
@@ -628,7 +629,7 @@ export function buildSingleRunROCSVG(data: MLResults): string {
       const label = MODEL_LABELS[model] || model;
       return `
         <rect x="${margin.left + plotWidth + 10}" y="${y - 5}" width="12" height="12" rx="2" fill="${color}" />
-        <text x="${margin.left + plotWidth + 26}" y="${y + 5}" font-size="9" fill="#334155">${label} (${aurocs[idx]}%)</text>
+        <text x="${margin.left + plotWidth + 26}" y="${y + 5}" font-size="9" fill="#334155">${escapeHtml(label)} (${aurocs[idx]}%)</text>
       `;
     })
     .join("");
@@ -704,7 +705,7 @@ export function buildSingleRunKMSVG(data: MLResults): string {
     .map((v) => {
       const x = margin.left + v * plotWidth;
       const label = (v * maxTime).toFixed(0);
-      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`;
+      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${escapeHtml(label)}</text>`;
     })
     .join("");
 
@@ -841,7 +842,7 @@ export function buildClinicalKMSVG(
     .map((v) => {
       const x = margin.left + v * plotWidth;
       const label = (v * maxTime).toFixed(0);
-      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`;
+      return `<text x="${x}" y="${margin.top + plotHeight + 18}" text-anchor="middle" font-size="10" fill="#64748b">${escapeHtml(label)}</text>`;
     })
     .join("");
 
@@ -927,7 +928,7 @@ export function buildFeatureImportanceSVG(
       const color = getBarColor(idx, sortedFeatures.length);
 
       return `
-        <text x="${margin.left - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" font-size="10" fill="#334155" style="font-family: monospace;">${feat.feature.length > 18 ? feat.feature.slice(0, 16) + "…" : feat.feature}</text>
+        <text x="${margin.left - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" font-size="10" fill="#334155" style="font-family: monospace;">${escapeHtml(feat.feature.length > 18 ? feat.feature.slice(0, 16) + "…" : feat.feature)}</text>
         <rect x="${margin.left}" y="${y + 3}" width="${barW}" height="${barHeight - 6}" rx="3" fill="${color}" />
         <text x="${margin.left + barW + 6}" y="${y + barHeight / 2 + 4}" font-size="9" fill="#64748b">${normalized.toFixed(1)}%</text>
       `;
@@ -947,7 +948,7 @@ export function buildFeatureImportanceSVG(
     .join("");
 
   const titleText = title || `Top ${sortedFeatures.length} Features by Importance`;
-  const titleEl = `<text x="${width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">${titleText}</text>`;
+  const titleEl = `<text x="${width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">${escapeHtml(titleText)}</text>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" fill="white" />
