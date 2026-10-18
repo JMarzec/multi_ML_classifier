@@ -136,7 +136,7 @@ export function ReportExport({ data }: ReportExportProps) {
     if (sections.summary) {
       const bestModel = Object.entries(data.model_performance)
         .filter(([, metrics]) => metrics?.auroc)
-        .sort((a, b) => (b[1]!.auroc!.mean || 0) - (a[1]!.auroc!.mean || 0))[0];
+        .sort((a, b) => (b[1]?.auroc?.mean ?? -Infinity) - (a[1]?.auroc?.mean ?? -Infinity))[0];
 
       html += `
     <section class="section">

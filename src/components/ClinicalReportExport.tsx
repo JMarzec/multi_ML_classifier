@@ -585,6 +585,8 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
                 >
                   <input
                     type="checkbox"
+                    aria-label={`Select patient ${patient.id}`}
+                    onClick={e => e.stopPropagation()}
                     checked={selectedPatients.includes(patient.id)}
                     onChange={() => togglePatient(patient.id)}
                     className="rounded"
