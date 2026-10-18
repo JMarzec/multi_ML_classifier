@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/utils/escapeHtml";
 import { toFiniteNumber, formatPValue, formatNumber, normalizePerGene, normalizeModelRiskScores } from "@/utils/analytics";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -140,11 +141,11 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
       <div class="grid">
         <div class="card">
           <div class="card-title">Time Variable</div>
-          <div class="card-value" style="font-size: 1.25rem;">${survivalData.time_variable}</div>
+          <div class="card-value" style="font-size: 1.25rem;">${escapeHtml(survivalData.time_variable)}</div>
         </div>
         <div class="card">
           <div class="card-title">Event Variable</div>
-          <div class="card-value" style="font-size: 1.25rem;">${survivalData.event_variable}</div>
+          <div class="card-value" style="font-size: 1.25rem;">${escapeHtml(survivalData.event_variable)}</div>
         </div>
         <div class="card">
           <div class="card-title">Genes Analyzed</div>
@@ -242,7 +243,7 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
 
         html += `
         <div class="forest-row">
-          <div class="forest-gene">${gene.gene}</div>
+          <div class="forest-gene">${escapeHtml(gene.gene)}</div>
           <div class="forest-bar-container">
             <div class="forest-ref" style="left: ${refPercent}%;"></div>
             <div class="forest-bar" style="width: ${hrPercent}%; background: ${color}; opacity: ${gene.cox_p < 0.05 ? 1 : 0.5};"></div>
@@ -285,7 +286,7 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
 
         html += `
           <tr class="${isSignificant ? "significant" : ""}">
-            <td class="mono">${gene.gene}</td>
+            <td class="mono">${escapeHtml(gene.gene)}</td>
             <td class="mono" style="text-align: right;">${formatPValue(gene.logrank_p)}</td>
             <td class="mono" style="text-align: right; font-weight: 600;">${formatNumber(gene.cox_hr)}</td>
             <td class="mono" style="text-align: right; color: #6b7280;">(${formatNumber(gene.cox_hr_lower, 2)} - ${formatNumber(gene.cox_hr_upper, 2)})</td>
@@ -334,7 +335,7 @@ export function SurvivalReportExport({ data }: SurvivalReportExportProps) {
 
         html += `
           <tr class="${isSignificant ? "significant" : ""}">
-            <td style="font-weight: 600;">${(model.model || "").toUpperCase()}</td>
+            <td style="font-weight: 600;">${escapeHtml((model.model || "").toUpperCase())}</td>
             <td class="mono" style="text-align: right;">${formatPValue(stats.logrank_p)}</td>
             <td class="mono" style="text-align: right; font-weight: 600;">${formatNumber(stats.cox_hr)}</td>
             <td class="mono" style="text-align: right; color: #6b7280;">(${formatNumber(stats.cox_hr_lower, 2)} - ${formatNumber(stats.cox_hr_upper, 2)})</td>

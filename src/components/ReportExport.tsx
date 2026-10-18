@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/utils/escapeHtml";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -156,7 +157,7 @@ export function ReportExport({ data }: ReportExportProps) {
         </div>
         <div class="card">
           <div class="card-title">Permutation Tests</div>
-          <div class="card-value">${data.metadata.config.n_permutations}</div>
+          <div class="card-value">${escapeHtml(data.metadata.config.n_permutations)}</div>
         </div>
       </div>
     </section>
@@ -186,7 +187,7 @@ export function ReportExport({ data }: ReportExportProps) {
         .forEach(([model, metrics]) => {
           html += `
           <tr>
-            <td><strong>${modelLabels[model] || model}</strong></td>
+            <td><strong>${escapeHtml(modelLabels[model] || model)}</strong></td>
             <td class="mono">${metrics?.accuracy ? (metrics.accuracy.mean * 100).toFixed(1) + "%" : "N/A"}</td>
             <td class="mono highlight">${metrics?.auroc ? (metrics.auroc.mean * 100).toFixed(1) + "%" : "N/A"}</td>
             <td class="mono">${metrics?.sensitivity ? (metrics.sensitivity.mean * 100).toFixed(1) + "%" : "N/A"}</td>
@@ -267,7 +268,7 @@ export function ReportExport({ data }: ReportExportProps) {
         html += `
           <tr>
             <td>${idx + 1}</td>
-            <td class="mono">${feat.feature}</td>
+            <td class="mono">${escapeHtml(feat.feature)}</td>
             <td class="mono">${feat.importance.toFixed(4)}</td>
           </tr>
 `;
@@ -348,7 +349,7 @@ export function ReportExport({ data }: ReportExportProps) {
     <section class="section">
       <h2>Top Profile Rankings</h2>
       <p style="margin-bottom: 1rem; color: #6b7280;">
-        Top ${data.metadata.config.top_percent}% profiles ranked by prediction confidence.
+        Top ${escapeHtml(data.metadata.config.top_percent)}% profiles ranked by prediction confidence.
       </p>
       <table>
         <thead>
@@ -366,10 +367,10 @@ export function ReportExport({ data }: ReportExportProps) {
       data.profile_ranking.top_profiles.slice(0, 20).forEach((profile) => {
         html += `
           <tr>
-            <td>${profile.rank}</td>
-            <td class="mono">${profile.sample_index}</td>
-            <td>${profile.actual_class}</td>
-            <td>${profile.predicted_class}</td>
+            <td>${escapeHtml(profile.rank)}</td>
+            <td class="mono">${escapeHtml(profile.sample_index)}</td>
+            <td>${escapeHtml(profile.actual_class)}</td>
+            <td>${escapeHtml(profile.predicted_class)}</td>
             <td class="mono">${(profile.confidence * 100).toFixed(1)}%</td>
             <td><span class="badge ${profile.correct ? 'badge-success' : 'badge-info'}">${profile.correct ? '✓' : '✗'}</span></td>
           </tr>
@@ -390,27 +391,27 @@ export function ReportExport({ data }: ReportExportProps) {
       <div class="grid">
         <div class="card">
           <div class="card-title">Target Variable</div>
-          <div style="font-weight: 600;">${data.metadata.config.target_variable}</div>
+          <div style="font-weight: 600;">${escapeHtml(data.metadata.config.target_variable)}</div>
         </div>
         <div class="card">
           <div class="card-title">Cross-Validation</div>
-          <div style="font-weight: 600;">${data.metadata.config.n_folds}-fold × ${data.metadata.config.n_repeats} repeats</div>
+          <div style="font-weight: 600;">${escapeHtml(data.metadata.config.n_folds)}-fold × ${escapeHtml(data.metadata.config.n_repeats)} repeats</div>
         </div>
         <div class="card">
           <div class="card-title">Feature Selection</div>
-          <div style="font-weight: 600;">${data.metadata.config.feature_selection_method}</div>
+          <div style="font-weight: 600;">${escapeHtml(data.metadata.config.feature_selection_method)}</div>
         </div>
         <div class="card">
           <div class="card-title">Random Seed</div>
-          <div style="font-weight: 600;">${data.metadata.config.seed}</div>
+          <div style="font-weight: 600;">${escapeHtml(data.metadata.config.seed)}</div>
         </div>
       </div>
       <h3>Model Parameters</h3>
       <table>
-        <tr><td><strong>RF Trees</strong></td><td class="mono">${data.metadata.config.rf_ntree}</td></tr>
-        <tr><td><strong>XGBoost Rounds</strong></td><td class="mono">${data.metadata.config.xgb_nrounds}</td></tr>
-        <tr><td><strong>Max Features</strong></td><td class="mono">${data.metadata.config.max_features}</td></tr>
-        <tr><td><strong>Top Percent</strong></td><td class="mono">${data.metadata.config.top_percent}%</td></tr>
+        <tr><td><strong>RF Trees</strong></td><td class="mono">${escapeHtml(data.metadata.config.rf_ntree)}</td></tr>
+        <tr><td><strong>XGBoost Rounds</strong></td><td class="mono">${escapeHtml(data.metadata.config.xgb_nrounds)}</td></tr>
+        <tr><td><strong>Max Features</strong></td><td class="mono">${escapeHtml(data.metadata.config.max_features)}</td></tr>
+        <tr><td><strong>Top Percent</strong></td><td class="mono">${escapeHtml(data.metadata.config.top_percent)}%</td></tr>
       </table>
     </section>
 `;
@@ -419,7 +420,7 @@ export function ReportExport({ data }: ReportExportProps) {
     html += `
     <footer style="margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 0.875rem;">
       <p>Multi-Method ML Classifier • Powered by <a href="https://accelbio.pt/" target="_blank" rel="noopener noreferrer">AccelBio</a></p>
-      <p>R Version: ${data.metadata.r_version} | Analysis Date: ${new Date(data.metadata.generated_at).toLocaleDateString()}</p>
+      <p>R Version: ${escapeHtml(data.metadata.r_version)} | Analysis Date: ${new Date(data.metadata.generated_at).toLocaleDateString()}</p>
     </footer>
   </div>
 </body>

@@ -1,3 +1,4 @@
+import { escapeHtml } from "./escapeHtml";
 import { toFiniteNumber, formatPValue, normalizeModelRiskScores } from "./analytics";
 import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/types/ml-results";
 import { buildROCOverlaySVG, buildKMComparisonSVG, buildUpsetMatrixSVG, buildFeatureImportanceSVG, buildConfusionMatrixSVG } from "./chartToSvg";
@@ -131,7 +132,7 @@ export function buildComparisonReportHTML(runs: { name: string; data: MLResults 
           (run, idx) => `
         <div class="card" style="border-left-color: ${idx === 0 ? "#0ea5e9" : idx === 1 ? "#6366f1" : idx === 2 ? "#10b981" : "#f59e0b"};">
           <div class="label" style="color: ${idx === 0 ? "#0ea5e9" : idx === 1 ? "#6366f1" : idx === 2 ? "#10b981" : "#f59e0b"};">${runLabels[idx]}</div>
-          <div style="font-weight: 700; word-break: break-all;">${run.name}</div>
+          <div style="font-weight: 700; word-break: break-all;">${escapeHtml(run.name)}</div>
           <div class="muted">Generated: ${new Date(run.data.metadata.generated_at).toLocaleDateString()}</div>
         </div>
       `
@@ -257,9 +258,9 @@ export function buildComparisonReportHTML(runs: { name: string; data: MLResults 
           .map(
             (i) => `
           <tr>
-            <td>${i.label}</td>
+            <td>${escapeHtml(i.label)}</td>
             <td>${i.count}</td>
-            <td>${i.features.slice(0, 10).map((f) => `<span class="pill">${f}</span>`).join(" ")}${i.features.length > 10 ? ` <span class="muted">+${i.features.length - 10} more</span>` : ""}</td>
+            <td>${i.features.slice(0, 10).map((f) => `<span class="pill">${escapeHtml(f)}</span>`).join(" ")}${i.features.length > 10 ? ` <span class="muted">+${i.features.length - 10} more</span>` : ""}</td>
           </tr>
         `
           )
