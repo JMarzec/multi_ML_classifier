@@ -22,12 +22,14 @@ var init_define_import_meta_env = __esm({
 var jsonSchemaValidator_exports = {};
 __export(jsonSchemaValidator_exports, {
   formatValidationMessages: () => formatValidationMessages,
+  isRecord: () => isRecord,
+  parseMLResults: () => parseMLResults,
   validateMLResultsSchema: () => validateMLResultsSchema
 });
 function validateMLResultsSchema(data) {
   const errors = [];
   const warnings = [];
-  if (!data || typeof data !== "object") {
+  if (!isRecord(data)) {
     errors.push({
       field: "root",
       message: "Invalid JSON: Expected an object at the root level",
@@ -36,6 +38,7 @@ function validateMLResultsSchema(data) {
     return { isValid: false, errors, warnings };
   }
   const obj = data;
+  validateStructures(obj, errors);
   if (!obj.metadata) {
     errors.push({
       field: "metadata",
@@ -96,7 +99,7 @@ function validateMLResultsSchema(data) {
   };
 }
 function validateMetadata(metadata, errors, warnings) {
-  if (typeof metadata !== "object" || metadata === null) {
+  if (!isRecord(metadata)) {
     errors.push({
       field: "metadata",
       message: "'metadata' should be an object containing configuration details.",
@@ -112,6 +115,10 @@ function validateMetadata(metadata, errors, warnings) {
       severity: "error"
     });
   } else {
+    if (!isRecord(meta.config)) {
+      errors.push({ field: "metadata.config", message: "Expected a configuration object", severity: "error" });
+      return;
+    }
     const config = meta.config;
     if (!config.target_variable) {
       warnings.push({
@@ -137,7 +144,7 @@ function validateMetadata(metadata, errors, warnings) {
   }
 }
 function validateModelPerformance(perf, errors, warnings) {
-  if (typeof perf !== "object" || perf === null) {
+  if (!isRecord(perf)) {
     errors.push({
       field: "model_performance",
       message: "'model_performance' should be an object with model names as keys (rf, svm, xgboost, etc.).",
@@ -157,6 +164,10 @@ function validateModelPerformance(perf, errors, warnings) {
   }
   foundModels.forEach((modelName) => {
     const modelData = models[modelName];
+    if (!isRecord(modelData)) {
+      errors.push({ field: `model_performance.${modelName}`, message: "Expected a model metrics object, not null", severity: "error" });
+      return;
+    }
     if (!modelData.auroc && !modelData.accuracy) {
       warnings.push({
         field: `model_performance.${modelName}`,
@@ -201,6 +212,7 @@ function validateSurvivalAnalysis(survival, errors, warnings) {
         });
       } else {
         const first = perGene[0];
+        if (!isRecord(first)) return;
         if (!first.gene) {
           errors.push({
             field: "survival_analysis.per_gene[0].gene",
@@ -287,6 +299,7 @@ function validateProfileRanking(ranking, errors, warnings) {
   }
   if (rank.all_rankings && Array.isArray(rank.all_rankings) && rank.all_rankings.length > 0) {
     const first = rank.all_rankings[0];
+    if (!isRecord(first)) return;
     if (!first.sample_id && first.sample_index === void 0) {
       warnings.push({
         field: "profile_ranking.all_rankings[0]",
@@ -332,6 +345,97 @@ function formatValidationMessages(result) {
     });
   }
   return messages;
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function validateStructures(obj, errors) {
+  const fail = (field, message) => errors.push({ field, message, severity: "error" });
+  const array = (value, field, item) => {
+    if (value == null) return;
+    if (!Array.isArray(value)) {
+      fail(field, "Expected an array");
+      return;
+    }
+    value.forEach((v, i) => {
+      if (!item(v)) fail(`${field}[${i}]`, "Invalid array entry");
+    });
+  };
+  array(obj.selected_features, "selected_features", (v) => typeof v === "string");
+  array(obj.feature_importance, "feature_importance", (v) => isRecord(v) && typeof v.feature === "string" && typeof v.importance === "number" && Number.isFinite(v.importance));
+  if (obj.profile_ranking != null) {
+    if (!isRecord(obj.profile_ranking)) fail("profile_ranking", "Expected a rankings object");
+    else for (const key of ["all_rankings", "top_profiles"]) {
+      array(obj.profile_ranking[key], `profile_ranking.${key}`, (v) => isRecord(v) && (typeof v.sample_id === "string" || typeof v.sample_index === "number") && (typeof v.actual_class === "string" || typeof v.actual_class === "number") && (typeof v.predicted_class === "string" || typeof v.predicted_class === "number"));
+    }
+  }
+  if (isRecord(obj.model_performance)) for (const [name, model] of Object.entries(obj.model_performance)) {
+    if (!isRecord(model)) {
+      fail(`model_performance.${name}`, "Expected a model metrics object");
+      continue;
+    }
+    for (const metric of ["accuracy", "auroc", "sensitivity", "specificity", "precision", "f1_score", "balanced_accuracy", "kappa"]) {
+      const value = model[metric];
+      if (value != null && (!isRecord(value) || value.mean != null && value.mean !== "NA" && (typeof value.mean !== "number" || !Number.isFinite(value.mean)))) fail(`model_performance.${name}.${metric}`, "Expected a metrics summary with a numeric mean or null");
+    }
+    array(model.roc_curve, `model_performance.${name}.roc_curve`, (v) => isRecord(v) && typeof v.fpr === "number" && typeof v.tpr === "number");
+    const cm = model.confusion_matrix;
+    if (cm != null && (!isRecord(cm) || ["tp", "tn", "fp", "fn"].some((k) => typeof cm[k] !== "number"))) fail(`model_performance.${name}.confusion_matrix`, "Expected numeric TP, TN, FP and FN counts");
+  }
+  if (obj.survival_analysis != null) {
+    if (!isRecord(obj.survival_analysis)) fail("survival_analysis", "Expected a survival analysis object");
+    else for (const key of ["per_gene", "model_risk_scores"]) {
+      const value = obj.survival_analysis[key];
+      if (value != null && !Array.isArray(value) && !isRecord(value)) fail(`survival_analysis.${key}`, "Expected an array or keyed object");
+      else if (value != null) {
+        const entries = Array.isArray(value) ? value : Object.values(value);
+        entries.forEach((v, i) => {
+          if (!isRecord(v)) fail(`survival_analysis.${key}[${i}]`, "Expected a survival statistics object");
+        });
+      }
+    }
+  }
+  for (const key of ["clustering", "preprocessing", "calibration_curves", "feature_boxplot_stats"]) {
+    if (obj[key] != null && !isRecord(obj[key])) fail(key, "Expected an object");
+  }
+  if (isRecord(obj.clustering)) for (const [method, embedding] of Object.entries(obj.clustering)) {
+    if (embedding == null) continue;
+    if (!isRecord(embedding)) {
+      fail(`clustering.${method}`, "Expected an embedding object");
+      continue;
+    }
+    array(embedding.points, `clustering.${method}.points`, (v) => isRecord(v) && typeof v.x === "number" && typeof v.y === "number" && typeof v.sample_id === "string");
+  }
+}
+function parseMLResults(text) {
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("Invalid JSON syntax. Please check the file contents.");
+  }
+  const result = validateMLResultsSchema(raw);
+  if (!result.isValid) throw new Error(result.errors.map((e) => `${e.field}: ${e.message}`).join("\n"));
+  const data = raw;
+  for (const model of Object.values(data.model_performance)) {
+    if (!model) continue;
+    for (const [key, value] of Object.entries(model)) {
+      if (isRecord(value) && (value.mean === "NA" || value.mean === null)) {
+        delete model[key];
+      }
+    }
+  }
+  data.feature_importance ??= [];
+  data.selected_features ??= [];
+  if (data.profile_ranking) {
+    data.profile_ranking.all_rankings ??= [];
+    data.profile_ranking.top_profiles ??= [];
+    for (const r of [...data.profile_ranking.all_rankings, ...data.profile_ranking.top_profiles]) {
+      r.actual_class = String(r.actual_class);
+      r.predicted_class = String(r.predicted_class);
+    }
+  }
+  return data;
 }
 var init_jsonSchemaValidator = __esm({
   "src/utils/jsonSchemaValidator.ts"() {
@@ -379,8 +483,8 @@ var validate_json_default = defineTool({
       content: [{ type: "text", text }],
       structuredContent: {
         isValid: result.isValid,
-        errors: result.errors,
-        warnings: result.warnings
+        errors: result.errors.map(({ field, message, severity }) => ({ field, message, severity })),
+        warnings: result.warnings.map(({ field, message, severity }) => ({ field, message, severity }))
       }
     };
   }
@@ -388,6 +492,7 @@ var validate_json_default = defineTool({
 
 // src/lib/mcp/tools/summarize-run.ts
 init_define_import_meta_env();
+init_jsonSchemaValidator();
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.23.0";
 import { z as z2 } from "npm:zod@^4.4.3";
 function num(v) {
@@ -408,7 +513,7 @@ var summarize_run_default = defineTool2({
   handler: ({ json, top_features }) => {
     let data;
     try {
-      data = JSON.parse(json);
+      data = parseMLResults(json);
     } catch (e) {
       return {
         content: [{ type: "text", text: `Invalid JSON: ${e.message}` }],
@@ -416,9 +521,9 @@ var summarize_run_default = defineTool2({
       };
     }
     const topN = top_features ?? 20;
-    const meta = data.metadata ?? {};
-    const cfg = meta.config ?? {};
-    const prep = data.preprocessing ?? {};
+    const meta = data.metadata;
+    const cfg = meta.config;
+    const prep = data.preprocessing;
     const perf = data.model_performance ?? {};
     const features = Array.isArray(data.selected_features) ? data.selected_features : [];
     const modelRows = [];
@@ -440,19 +545,19 @@ var summarize_run_default = defineTool2({
     lines.push(`- R version: ${meta.r_version ?? "n/a"}`);
     lines.push(`- Target variable: ${cfg.target_variable ?? "n/a"}`);
     lines.push(
-      `- Mode: ${cfg.analysis_mode ?? (prep.full_training_mode ? "full_training" : "cv")}`
+      `- Mode: ${cfg.analysis_mode ?? (prep?.full_training_mode ? "full_training" : "cv")}`
     );
     if (cfg.n_folds || cfg.n_repeats) {
       lines.push(`- CV: ${cfg.n_folds ?? "?"} folds \xD7 ${cfg.n_repeats ?? "?"} repeats`);
     }
-    if (cfg.train_ratio !== void 0) lines.push(`- Train ratio: ${cfg.train_ratio}`);
+    if (data.preprocessing?.train_ratio !== void 0) lines.push(`- Train ratio: ${data.preprocessing.train_ratio}`);
     lines.push(`- Feature selection: ${cfg.feature_selection_method ?? "n/a"} (max ${cfg.max_features ?? "n/a"})`);
     lines.push("");
     lines.push(`## Preprocessing`);
-    lines.push(`- Samples: ${prep.original_samples ?? "n/a"}`);
-    lines.push(`- Features: ${prep.original_features ?? "n/a"}`);
-    lines.push(`- Missing: ${prep.missing_values ?? "n/a"} (${prep.missing_pct ?? "n/a"}%)`);
-    lines.push(`- Class distribution: ${JSON.stringify(prep.class_distribution ?? {})}`);
+    lines.push(`- Samples: ${prep?.original_samples ?? "n/a"}`);
+    lines.push(`- Features: ${prep?.original_features ?? "n/a"}`);
+    lines.push(`- Missing: ${prep?.missing_values ?? "n/a"} (${prep?.missing_pct ?? "n/a"}%)`);
+    lines.push(`- Class distribution: ${JSON.stringify(prep?.class_distribution ?? {})}`);
     lines.push("");
     lines.push(`## Model Performance (mean)`);
     lines.push(`| Model | AUROC | Accuracy | F1 | Sens | Spec |`);
@@ -472,8 +577,8 @@ var summarize_run_default = defineTool2({
     return {
       content: [{ type: "text", text: lines.join("\n") }],
       structuredContent: {
-        metadata: meta,
-        preprocessing: prep,
+        metadata: { generated_at: meta.generated_at, r_version: meta.r_version, config: { target_variable: cfg.target_variable, analysis_mode: cfg.analysis_mode ?? null, n_folds: cfg.n_folds, n_repeats: cfg.n_repeats } },
+        preprocessing: prep ? { original_samples: prep.original_samples, original_features: prep.original_features, missing_values: prep.missing_values, missing_pct: prep.missing_pct, class_distribution: { ...prep.class_distribution } } : null,
         models: modelRows,
         best_model_by_auroc: bestByAuroc ?? null,
         selected_features_top: features.slice(0, topN),
@@ -485,6 +590,7 @@ var summarize_run_default = defineTool2({
 
 // src/lib/mcp/tools/compare-runs.ts
 init_define_import_meta_env();
+init_jsonSchemaValidator();
 import { defineTool as defineTool3 } from "npm:@lovable.dev/mcp-js@0.23.0";
 import { z as z3 } from "npm:zod@^4.4.3";
 function num2(v) {
@@ -527,8 +633,8 @@ var compare_runs_default = defineTool3({
     let a;
     let b;
     try {
-      a = JSON.parse(json_a);
-      b = JSON.parse(json_b);
+      a = parseMLResults(json_a);
+      b = parseMLResults(json_b);
     } catch (e) {
       return {
         content: [{ type: "text", text: `Invalid JSON: ${e.message}` }],

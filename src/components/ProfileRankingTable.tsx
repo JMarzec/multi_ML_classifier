@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -76,7 +76,7 @@ export function ProfileRankingTable({ rankings, topPercent }: ProfileRankingTabl
   }, [rankings, search, sortField, sortAsc, filterMode]);
 
   // Reset page when search changes
-  useMemo(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [search, filterMode]);
 

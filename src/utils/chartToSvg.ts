@@ -1,3 +1,4 @@
+import { toFiniteNumber, normalizeModelRiskScores } from "@/utils/analytics";
 import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/types/ml-results";
 
 const RUN_COLORS_HEX = ["#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b"];
@@ -23,22 +24,9 @@ const MODEL_LABELS: Record<string, string> = {
 
 type ModelKey = keyof ModelPerformance;
 
-export function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
 
-function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
-  if (Array.isArray(raw)) return raw.filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-  }
-  return [];
-}
+
+
 
 // Build ROC Overlay SVG
 export function buildROCOverlaySVG(runs: { name: string; data: MLResults }[], model: ModelKey = "soft_vote"): string {
@@ -478,7 +466,8 @@ export function buildConfusionMatrixGridSVG(data: MLResults, modelsToShow?: stri
   const height = rows * cellHeight + 60;
 
   const miniMatrices = validModels.map((model, idx) => {
-    const cm = data.model_performance[model as keyof typeof data.model_performance]!.confusion_matrix!;
+    const cm = data.model_performance[model as keyof typeof data.model_performance]?.confusion_matrix;
+    if (!cm) return "";
     const col = idx % cols;
     const row = Math.floor(idx / cols);
     const offsetX = 20 + col * cellWidth;
@@ -968,3 +957,5 @@ export function buildFeatureImportanceSVG(
     ${bars}
   </svg>`;
 }
+
+export { toFiniteNumber } from "./analytics";

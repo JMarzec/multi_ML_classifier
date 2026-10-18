@@ -38,50 +38,6 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
     umap: exportedUmap && exportedUmap.length > 0,
   };
 
-  // Generate simulated dimensionality reduction data (fallback)
-  const generateClusteringData = (methodType: MethodType): DataPoint[] => {
-    const rankings = data.profile_ranking?.all_rankings || [];
-    const n = Math.max(rankings.length, 50);
-    const points: DataPoint[] = [];
-
-    const class0Center = methodType === "pca" ? { x: -2, y: -1 } :
-      methodType === "tsne" ? { x: -15, y: -10 } :
-      { x: -3, y: -2 };
-    const class1Center = methodType === "pca" ? { x: 2, y: 1 } :
-      methodType === "tsne" ? { x: 15, y: 10 } :
-      { x: 3, y: 2 };
-
-    const spread = methodType === "pca" ? 1.5 : methodType === "tsne" ? 8 : 2;
-
-    const accuracy = data.model_performance.soft_vote?.accuracy?.mean || 0.8;
-    const separation = accuracy * 0.8 + 0.2;
-
-    for (let i = 0; i < n; i++) {
-      const ranking = rankings[i];
-      const isClass1 = ranking ? ranking.actual_class === "1" : Math.random() > 0.5;
-      const center = isClass1 ? class1Center : class0Center;
-
-      const noiseX = (Math.random() - 0.5) * spread * (1 / separation);
-      const noiseY = (Math.random() - 0.5) * spread * (1 / separation);
-
-      const isMisclassified = ranking ? !ranking.correct : Math.random() > accuracy;
-      const effectiveCenter = isMisclassified ?
-        (isClass1 ? class0Center : class1Center) : center;
-
-      points.push({
-        x: parseFloat((effectiveCenter.x + noiseX).toFixed(2)),
-        y: parseFloat((effectiveCenter.y + noiseY).toFixed(2)),
-        sampleId: ranking?.sample_index?.toString() || `Sample_${i + 1}`,
-        actualClass: isClass1 ? "Positive" : "Negative",
-        predictedClass: ranking?.predicted_class === "1" ? "Positive" : "Negative",
-        confidence: ranking?.confidence || Math.random() * 0.3 + 0.7,
-        correct: ranking?.correct ?? !isMisclassified,
-      });
-    }
-
-    return points;
-  };
-
   // Build lookup map for ranking info
   const probBySampleId = new Map<string, { prob: number; pred: string; conf: number; correct: boolean; actual: string }>();
   (data.profile_ranking?.all_rankings || []).forEach((r) => {
@@ -105,7 +61,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
         y: Number(p.y.toFixed(2)),
         sampleId: p.sample_id,
         actualClass: p.actual_class,
-        predictedClass: r ? (r.pred === "1" ? "Positive" : "Negative") : "-",
+        predictedClass: r ? r.pred : "-",
         confidence: r?.conf ?? 0,
         correct: r?.correct ?? false,
       };
@@ -123,34 +79,20 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
       return convertExportedPoints(exportedUmap);
     }
     // Fallback to simulated data
-    return generateClusteringData(method);
+    return [];
   })();
 
-  const class0Data = clusteringData.filter((d) => d.actualClass === "Negative" || d.actualClass === "0");
-  const class1Data = clusteringData.filter((d) => d.actualClass === "Positive" || d.actualClass === "1");
-  const correctData = clusteringData.filter((d) => d.correct);
-  const incorrectData = clusteringData.filter((d) => !d.correct);
-  const predictedClass0 = clusteringData.filter((d) => d.predictedClass === "Negative");
-  const predictedClass1 = clusteringData.filter((d) => d.predictedClass === "Positive");
-
   const getScatterData = () => {
-    switch (colorBy) {
-      case "actual":
-        return [
-          { data: class0Data, name: "Negative (Actual)", fill: "hsl(var(--primary))" },
-          { data: class1Data, name: "Positive (Actual)", fill: "hsl(var(--secondary))" },
-        ];
-      case "predicted":
-        return [
-          { data: predictedClass0, name: "Negative (Predicted)", fill: "hsl(var(--info))" },
-          { data: predictedClass1, name: "Positive (Predicted)", fill: "hsl(var(--accent))" },
-        ];
-      case "correct":
-        return [
-          { data: correctData, name: "Correct", fill: "hsl(var(--success))" },
-          { data: incorrectData, name: "Misclassified", fill: "hsl(var(--destructive))" },
-        ];
-    }
+    if (colorBy === "correct") return [
+      { data: clusteringData.filter(d => d.correct), name: "Correct", fill: "hsl(var(--success))" },
+      { data: clusteringData.filter(d => !d.correct), name: "Misclassified", fill: "hsl(var(--destructive))" },
+    ];
+    const classes = [...new Set(clusteringData.map(d => colorBy === "actual" ? d.actualClass : d.predictedClass))];
+    const colors = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))"];
+    return classes.map((label, i) => ({
+      data: clusteringData.filter(d => (colorBy === "actual" ? d.actualClass : d.predictedClass) === label),
+      name: `${label} (${colorBy === "actual" ? "Actual" : "Predicted"})`, fill: colors[i % colors.length],
+    }));
   };
 
   const scatterGroups = getScatterData();
@@ -165,16 +107,9 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
 
   const axisLabel = getAxisLabel();
 
-  // Calculate separation metrics
-  const calculateSilhouette = () => {
-    // Simplified silhouette score simulation
-    const accuracy = data.model_performance.soft_vote?.accuracy?.mean || 0.8;
-    return (accuracy * 0.8 + Math.random() * 0.2).toFixed(3);
-  };
-
-  const varianceExplained = method === "pca" ? {
-    pc1: exportedVariance ? (exportedVariance.pc1 * 100).toFixed(1) : (Math.random() * 20 + 40).toFixed(1),
-    pc2: exportedVariance ? (exportedVariance.pc2 * 100).toFixed(1) : (Math.random() * 15 + 15).toFixed(1),
+  const varianceExplained = method === "pca" && exportedVariance ? {
+    pc1: (exportedVariance.pc1 * 100).toFixed(1),
+    pc2: (exportedVariance.pc2 * 100).toFixed(1),
   } : null;
 
   return (
@@ -224,7 +159,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
           <CardTitle className="flex items-center gap-2">
             Sample Clustering - {method.toUpperCase()}
             <Badge variant="outline" className="ml-2">
-              {hasRealData[method] ? "From analysis" : "Simulated"}
+              {hasRealData[method] ? "From analysis" : "Unavailable"}
             </Badge>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -232,7 +167,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
           </p>
         </CardHeader>
         <CardContent>
-          <div className="h-[500px]">
+          {clusteringData.length === 0 ? <p className="py-16 text-center text-muted-foreground">No {method.toUpperCase()} coordinates were exported for this run.</p> : <div className="h-[500px]">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
@@ -264,7 +199,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
                           <p className="text-sm">Actual: {data.actualClass}</p>
                           <p className="text-sm">Predicted: {data.predictedClass}</p>
                           <p className="text-sm">Confidence: {(data.confidence * 100).toFixed(1)}%</p>
-                          <p className={`text-sm font-medium ${data.correct ? 'text-green-500' : 'text-red-500'}`}>
+                          <p className={`text-sm font-medium ${data.correct ? 'text-success' : 'text-destructive'}`}>
                             {data.correct ? '✓ Correct' : '✗ Misclassified'}
                           </p>
                         </div>
@@ -286,7 +221,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
                 ))}
               </ScatterChart>
             </ResponsiveContainer>
-          </div>
+          </div>}
         </CardContent>
       </Card>
 
@@ -295,7 +230,7 @@ export function ClusteringVisualizationTab({ data }: ClusteringVisualizationTabP
         <Card className="bg-card border-border">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground mb-1">Silhouette Score</p>
-            <p className="text-2xl font-bold text-primary">{calculateSilhouette()}</p>
+            <p className="text-2xl font-bold text-primary">N/A</p>
           </CardContent>
         </Card>
         

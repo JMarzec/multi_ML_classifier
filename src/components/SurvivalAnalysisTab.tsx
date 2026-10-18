@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { toFiniteNumber, formatPValue, formatNumber, normalizePerGene, normalizeModelRiskScores } from "@/utils/analytics";
 import { useMemo, useState } from "react";
 import {
   LineChart,
@@ -281,28 +283,14 @@ const ForestPlotSVG = ({ data }: { data: ForestPlotEntry[] }) => {
   );
 };
 
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
 
-function formatPValue(p: unknown): string {
-  const n = toFiniteNumber(p);
-  if (n == null) return "NA";
-  return n < 0.001 ? n.toExponential(2) : n.toFixed(4);
-}
 
-function formatNumber(n: unknown, decimals: number = 3): string {
-  const v = toFiniteNumber(n);
-  if (v == null) return "NA";
-  return v.toFixed(decimals);
-}
+
+
+
 
 export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
+  const [geneSearch, setGeneSearch] = useState("");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
 
@@ -312,73 +300,20 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
   const hasValidSurvivalData = survivalData && 
     typeof survivalData === 'object' && 
     Object.keys(survivalData).length > 0 &&
-    (survivalData.per_gene || survivalData.model_risk_scores);
-
-  if (!hasValidSurvivalData) {
-    return (
-      <div className="bg-card rounded-xl p-12 border border-border text-center">
-        <Heart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Survival Analysis Data</h3>
-        <p className="text-muted-foreground max-w-md mx-auto">
-          Survival analysis requires time-to-event data (survival time and event status columns) in your annotation file. 
-          Configure the R script with <code className="bg-muted px-1 rounded">--time</code> and <code className="bg-muted px-1 rounded">--event</code> parameters.
-        </p>
-      </div>
-    );
-  }
+    (survivalData?.per_gene || survivalData?.model_risk_scores);
 
   // Helper to normalize per_gene from array or object format
-  function normalizePerGene(raw: unknown): PerGeneSurvival[] {
-    if (Array.isArray(raw)) {
-      return raw
-        .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
-        .map((g) => ({
-          ...(g as any),
-          logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
-          cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
-          cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
-          cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
-          cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
-          high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
-          low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
-        })) as PerGeneSurvival[];
-    }
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      // Object keyed by gene name
-      return Object.values(raw)
-        .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
-        .map((g) => ({
-          ...(g as any),
-          logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
-          cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
-          cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
-          cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
-          cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
-          high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
-          low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
-        })) as PerGeneSurvival[];
-    }
-    return [];
-  }
+  
 
   // Helper to normalize model_risk_scores from array or object format
-  function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
-    if (Array.isArray(raw)) {
-      return raw.filter((m) => typeof (m as any)?.model === "string");
-    }
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      // Object keyed by model name
-      return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-    }
-    return [];
-  }
+  
 
   // Normalize and sort genes by significance (Cox p-value)
   const sortedGenes = useMemo(() => {
-    const normalized = normalizePerGene(survivalData.per_gene);
+    const normalized = normalizePerGene(survivalData?.per_gene);
     const pForSort = (p: number) => (Number.isFinite(p) ? p : Number.POSITIVE_INFINITY);
     return [...normalized].sort((a, b) => pForSort(a.cox_p) - pForSort(b.cox_p));
-  }, [survivalData.per_gene]);
+  }, [survivalData?.per_gene]);
 
   const significantGenes = sortedGenes.filter((g) => Number.isFinite(g.cox_p) && g.cox_p < 0.05);
 
@@ -407,9 +342,24 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
 
   // Model risk score survival data (handles both array and object formats)
   const modelSurvivalData = useMemo(() => {
-    return normalizeModelRiskScores(survivalData.model_risk_scores);
-  }, [survivalData.model_risk_scores]);
+    return normalizeModelRiskScores(survivalData?.model_risk_scores);
+  }, [survivalData?.model_risk_scores]);
 
+  if (!hasValidSurvivalData || !survivalData) {
+    return (
+      <div className="bg-card rounded-xl p-12 border border-border text-center">
+        <Heart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-semibold mb-2">No Survival Analysis Data</h3>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          Survival analysis requires time-to-event data (survival time and event status columns) in your annotation file. 
+          Configure the R script with <code className="bg-muted px-1 rounded">--time</code> and <code className="bg-muted px-1 rounded">--event</code> parameters.
+        </p>
+      </div>
+    );
+  }
+
+  const activeGene = sortedGenes.find(g => g.gene === selectedGene);
+  const activeModel = modelSurvivalData.find(m => m.model === selectedModel);
   return (
     <div className="space-y-6">
       {/* Header Info */}
@@ -476,8 +426,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
               <CardTitle className="text-base">Select Gene/Feature for Survival Curve</CardTitle>
             </CardHeader>
             <CardContent>
+              <Input aria-label="Search survival genes" placeholder="Search genes" value={geneSearch} onChange={e => setGeneSearch(e.target.value)} className="mb-3" />
               <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto">
-                {sortedGenes.slice(0, 30).map((gene) => {
+                {sortedGenes.filter(g => g.gene.toLowerCase().includes(geneSearch.toLowerCase())).map((gene) => {
                   const isSig = Number.isFinite(gene.cox_p) && gene.cox_p < 0.05;
                   return (
                     <Badge
@@ -493,9 +444,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                 })}
               </div>
 
-              {selectedGene && sortedGenes.find(g => g.gene === selectedGene) && (
+              {activeGene && (
                 <KaplanMeierCurve
-                  gene={sortedGenes.find(g => g.gene === selectedGene)!}
+                  gene={activeGene}
                 />
               )}
 
@@ -560,7 +511,7 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedGenes.slice(0, 50).map((gene) => (
+                    {sortedGenes.map((gene) => (
                       <tr
                         key={gene.gene}
                         className={`border-b border-border/50 hover:bg-muted/30 ${gene.cox_p < 0.05 ? 'bg-primary/5' : ''}`}
@@ -613,8 +564,8 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
 
                 <div className="flex flex-wrap gap-2 mb-4">
                   {modelSurvivalData.map((m) => {
-                    const modelName = String((m as any)?.model ?? "");
-                    const coxP = toFiniteNumber((m as any)?.stats?.cox_p);
+                    const modelName = m.model;
+                    const coxP = toFiniteNumber(m.stats.cox_p);
                     return (
                       <Badge
                         key={modelName || Math.random().toString(16).slice(2)}
@@ -629,9 +580,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                   })}
                 </div>
 
-                {selectedModel && modelSurvivalData.find(m => m.model === selectedModel) && (
+                {activeModel && (
                   <ModelKaplanMeierCurve
-                    data={modelSurvivalData.find(m => m.model === selectedModel)!}
+                    data={activeModel}
                   />
                 )}
 
@@ -924,7 +875,7 @@ function ModelKaplanMeierCurve({ data }: { data: ModelRiskScoreSurvival }) {
           <Info className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             <strong className="text-success">Prognostic Value:</strong> The {data.model?.toUpperCase() ?? 'MODEL'} model's risk score significantly stratifies patients by survival (p &lt; 0.05).
-            High-risk patients show {(data.stats.cox_hr ?? 1) > 1 ? `${formatNumber(data.stats.cox_hr, 1)}x higher` : `${formatNumber(data.stats.cox_hr ? 1/data.stats.cox_hr : 1, 1)}x lower`} hazard compared to low-risk patients.
+            The Cox hazard ratio is {formatNumber(data.stats.cox_hr, 2)} per 1.0 increase in continuous positive-class probability; it is not a high-versus-low cohort ratio.
           </p>
         </div>
       )}

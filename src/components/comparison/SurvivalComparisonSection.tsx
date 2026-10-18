@@ -1,3 +1,4 @@
+import { toFiniteNumber, formatPValue, normalizeModelRiskScores } from "@/utils/analytics";
 import { useMemo } from "react";
 import {
   LineChart,
@@ -24,30 +25,11 @@ interface ComparisonPoint {
   [key: string]: number;
 }
 
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
 
-function formatPValue(p: unknown): string {
-  const n = toFiniteNumber(p);
-  if (n == null) return "NA";
-  return n < 0.001 ? n.toExponential(2) : n.toFixed(4);
-}
 
-function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
-  if (Array.isArray(raw)) {
-    return raw.filter((m) => typeof (m as any)?.model === "string");
-  }
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-  }
-  return [];
-}
+
+
+
 
 export function SurvivalComparisonSection({
   runs,

@@ -19,7 +19,7 @@ export function validateMLResultsSchema(data: unknown): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  if (!data || typeof data !== "object") {
+  if (!isRecord(data)) {
     errors.push({
       field: "root",
       message: "Invalid JSON: Expected an object at the root level",
@@ -29,6 +29,8 @@ export function validateMLResultsSchema(data: unknown): ValidationResult {
   }
 
   const obj = data as Record<string, unknown>;
+
+  validateStructures(obj, errors);
 
   // Required fields
   if (!obj.metadata) {
@@ -100,7 +102,7 @@ export function validateMLResultsSchema(data: unknown): ValidationResult {
 }
 
 function validateMetadata(metadata: unknown, errors: ValidationError[], warnings: ValidationError[]) {
-  if (typeof metadata !== "object" || metadata === null) {
+  if (!isRecord(metadata)) {
     errors.push({
       field: "metadata",
       message: "'metadata' should be an object containing configuration details.",
@@ -118,7 +120,11 @@ function validateMetadata(metadata: unknown, errors: ValidationError[], warnings
       severity: "error",
     });
   } else {
-    const config = meta.config as Record<string, unknown>;
+    if (!isRecord(meta.config)) {
+      errors.push({field: "metadata.config", message: "Expected a configuration object", severity: "error"});
+      return;
+    }
+    const config = meta.config;
     if (!config.target_variable) {
       warnings.push({
         field: "metadata.config.target_variable",
@@ -146,7 +152,7 @@ function validateMetadata(metadata: unknown, errors: ValidationError[], warnings
 }
 
 function validateModelPerformance(perf: unknown, errors: ValidationError[], warnings: ValidationError[]) {
-  if (typeof perf !== "object" || perf === null) {
+  if (!isRecord(perf)) {
     errors.push({
       field: "model_performance",
       message: "'model_performance' should be an object with model names as keys (rf, svm, xgboost, etc.).",
@@ -168,7 +174,11 @@ function validateModelPerformance(perf: unknown, errors: ValidationError[], warn
   }
 
   foundModels.forEach((modelName) => {
-    const modelData = models[modelName] as Record<string, unknown>;
+    const modelData = models[modelName];
+    if (!isRecord(modelData)) {
+      errors.push({field: `model_performance.${modelName}`, message: "Expected a model metrics object, not null", severity: "error"});
+      return;
+    }
     if (!modelData.auroc && !modelData.accuracy) {
       warnings.push({
         field: `model_performance.${modelName}`,
@@ -219,7 +229,8 @@ function validateSurvivalAnalysis(survival: unknown, errors: ValidationError[], 
         });
       } else {
         // Check first entry for required fields
-        const first = perGene[0] as Record<string, unknown>;
+        const first = perGene[0];
+        if (!isRecord(first)) return;
         if (!first.gene) {
           errors.push({
             field: "survival_analysis.per_gene[0].gene",
@@ -313,7 +324,8 @@ function validateProfileRanking(ranking: unknown, errors: ValidationError[], war
   }
 
   if (rank.all_rankings && Array.isArray(rank.all_rankings) && (rank.all_rankings as unknown[]).length > 0) {
-    const first = (rank.all_rankings as unknown[])[0] as Record<string, unknown>;
+    const first = (rank.all_rankings as unknown[])[0];
+    if (!isRecord(first)) return;
     if (!first.sample_id && first.sample_index === undefined) {
       warnings.push({
         field: "profile_ranking.all_rankings[0]",
@@ -369,4 +381,87 @@ export function formatValidationMessages(result: ValidationResult): string[] {
   }
 
   return messages;
+}
+
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateStructures(obj: Record<string, unknown>, errors: ValidationError[]) {
+  const fail = (field: string, message: string) => errors.push({ field, message, severity: "error" });
+  const array = (value: unknown, field: string, item: (v: unknown) => boolean) => {
+    if (value == null) return;
+    if (!Array.isArray(value)) { fail(field, "Expected an array"); return; }
+    value.forEach((v, i) => { if (!item(v)) fail(`${field}[${i}]`, "Invalid array entry"); });
+  };
+  array(obj.selected_features, "selected_features", v => typeof v === "string");
+  array(obj.feature_importance, "feature_importance", v => isRecord(v) && typeof v.feature === "string" && typeof v.importance === "number" && Number.isFinite(v.importance));
+  if (obj.profile_ranking != null) {
+    if (!isRecord(obj.profile_ranking)) fail("profile_ranking", "Expected a rankings object");
+    else for (const key of ["all_rankings", "top_profiles"]) {
+      array(obj.profile_ranking[key], `profile_ranking.${key}`, v => isRecord(v) &&
+        (typeof v.sample_id === "string" || typeof v.sample_index === "number") &&
+        (typeof v.actual_class === "string" || typeof v.actual_class === "number") &&
+        (typeof v.predicted_class === "string" || typeof v.predicted_class === "number"));
+    }
+  }
+  if (isRecord(obj.model_performance)) for (const [name, model] of Object.entries(obj.model_performance)) {
+    if (!isRecord(model)) { fail(`model_performance.${name}`, "Expected a model metrics object"); continue; }
+    for (const metric of ["accuracy", "auroc", "sensitivity", "specificity", "precision", "f1_score", "balanced_accuracy", "kappa"]) {
+      const value = model[metric];
+      if (value != null && (!isRecord(value) || (value.mean != null && value.mean !== "NA" && (typeof value.mean !== "number" || !Number.isFinite(value.mean))))) fail(`model_performance.${name}.${metric}`, "Expected a metrics summary with a numeric mean or null");
+    }
+    array(model.roc_curve, `model_performance.${name}.roc_curve`, v => isRecord(v) && typeof v.fpr === "number" && typeof v.tpr === "number");
+    const cm = model.confusion_matrix;
+    if (cm != null && (!isRecord(cm) || ["tp", "tn", "fp", "fn"].some(k => typeof cm[k] !== "number"))) fail(`model_performance.${name}.confusion_matrix`, "Expected numeric TP, TN, FP and FN counts");
+  }
+  if (obj.survival_analysis != null) {
+    if (!isRecord(obj.survival_analysis)) fail("survival_analysis", "Expected a survival analysis object");
+    else for (const key of ["per_gene", "model_risk_scores"]) {
+      const value = obj.survival_analysis[key];
+      if (value != null && !Array.isArray(value) && !isRecord(value)) fail(`survival_analysis.${key}`, "Expected an array or keyed object");
+      else if (value != null) {
+        const entries = Array.isArray(value) ? value : Object.values(value);
+        entries.forEach((v, i) => { if (!isRecord(v)) fail(`survival_analysis.${key}[${i}]`, "Expected a survival statistics object"); });
+      }
+    }
+  }
+  for (const key of ["clustering", "preprocessing", "calibration_curves", "feature_boxplot_stats"]) {
+    if (obj[key] != null && !isRecord(obj[key])) fail(key, "Expected an object");
+  }
+  if (isRecord(obj.clustering)) for (const [method, embedding] of Object.entries(obj.clustering)) {
+    if (embedding == null) continue;
+    if (!isRecord(embedding)) { fail(`clustering.${method}`, "Expected an embedding object"); continue; }
+    array(embedding.points, `clustering.${method}.points`, v => isRecord(v) && typeof v.x === "number" && typeof v.y === "number" && typeof v.sample_id === "string");
+  }
+}
+
+/** The only entry point for results ingestion, including stateless tools. */
+export function parseMLResults(text: string): MLResults {
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch { throw new Error("Invalid JSON syntax. Please check the file contents."); }
+  const result = validateMLResultsSchema(raw);
+  if (!result.isValid) throw new Error(result.errors.map(e => `${e.field}: ${e.message}`).join("\n"));
+  // Structural validation above establishes the external JSON contract.
+  const data = raw as MLResults;
+  for (const model of Object.values(data.model_performance)) {
+    if (!model) continue;
+    for (const [key, value] of Object.entries(model)) {
+      if (isRecord(value) && (value.mean === "NA" || value.mean === null)) {
+        delete model[key];
+      }
+    }
+  }
+  data.feature_importance ??= [];
+  data.selected_features ??= [];
+  if (data.profile_ranking) {
+    data.profile_ranking.all_rankings ??= [];
+    data.profile_ranking.top_profiles ??= [];
+    for (const r of [...data.profile_ranking.all_rankings, ...data.profile_ranking.top_profiles]) {
+      r.actual_class = String(r.actual_class);
+      r.predicted_class = String(r.predicted_class);
+    }
+  }
+  return data;
 }

@@ -36,8 +36,8 @@ export default defineTool({
       content: [{ type: "text", text }],
       structuredContent: {
         isValid: result.isValid,
-        errors: result.errors,
-        warnings: result.warnings,
+        errors: result.errors.map(({field, message, severity}) => ({field, message, severity})),
+        warnings: result.warnings.map(({field, message, severity}) => ({field, message, severity})),
       },
     };
   },

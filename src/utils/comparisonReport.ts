@@ -1,3 +1,4 @@
+import { toFiniteNumber, formatPValue, normalizeModelRiskScores } from "./analytics";
 import type { MLResults, ModelPerformance, ModelRiskScoreSurvival } from "@/types/ml-results";
 import { buildROCOverlaySVG, buildKMComparisonSVG, buildUpsetMatrixSVG, buildFeatureImportanceSVG, buildConfusionMatrixSVG } from "./chartToSvg";
 
@@ -14,29 +15,6 @@ const MODEL_LABELS: Record<string, string> = {
 export const RUN_LABELS = ["Run A", "Run B", "Run C", "Run D"];
 
 type ModelKey = keyof ModelPerformance;
-
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
-
-function formatPValue(p: unknown): string {
-  const n = toFiniteNumber(p);
-  if (n == null) return "NA";
-  return n < 0.001 ? n.toExponential(2) : n.toFixed(4);
-}
-
-function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
-  if (Array.isArray(raw)) return raw.filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-  }
-  return [];
-}
 
 export function computeFeatureIntersections(featureLists: string[][], runLabels: string[]) {
   const sets = featureLists.map((l) => new Set(l));

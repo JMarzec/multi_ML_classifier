@@ -122,16 +122,16 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
     
     return models.map(model => {
       const baseMetrics = runs[0].data.model_performance[model];
-      const baseAuroc = baseMetrics?.auroc?.mean || 0;
+      const baseAuroc = baseMetrics?.auroc?.mean;
       
       const diffs = runs.slice(1).map((run, idx) => {
         const metrics = run.data.model_performance[model];
-        const auroc = metrics?.auroc?.mean || 0;
-        return { idx: idx + 1, diff: (auroc - baseAuroc) * 100 };
+        const auroc = metrics?.auroc?.mean;
+        return { idx: idx + 1, diff: typeof auroc === "number" && typeof baseAuroc === "number" ? (auroc - baseAuroc) * 100 : null };
       });
       
-      return { model: MODEL_LABELS[model], diffs };
-    }).filter(d => runs[0].data.model_performance[d.model as keyof ModelPerformance] !== undefined);
+      return { key: model, model: MODEL_LABELS[model], diffs };
+    }).filter(d => runs[0].data.model_performance[d.key] !== undefined);
   }, [runs]);
 
   return (
@@ -223,14 +223,14 @@ export function ComparisonDashboard({ runs }: ComparisonDashboardProps) {
                       <td key={idx} className="py-2 px-3 text-center">
                         <div className={cn(
                           "flex items-center justify-center gap-1 font-mono font-bold",
-                          diff > 0.5 && "text-accent",
-                          diff < -0.5 && "text-destructive",
-                          Math.abs(diff) <= 0.5 && "text-muted-foreground"
+                          diff !== null && diff > 0.5 && "text-accent",
+                          diff !== null && diff < -0.5 && "text-destructive",
+                          (diff === null || Math.abs(diff) <= 0.5) && "text-muted-foreground"
                         )}>
-                          {diff > 0.5 ? <ArrowUp className="w-3 h-3" /> : 
-                           diff < -0.5 ? <ArrowDown className="w-3 h-3" /> : 
+                          {diff !== null && diff > 0.5 ? <ArrowUp className="w-3 h-3" /> : 
+                           diff !== null && diff < -0.5 ? <ArrowDown className="w-3 h-3" /> : 
                            <Minus className="w-3 h-3" />}
-                          <span>{diff >= 0 ? "+" : ""}{diff.toFixed(1)}%</span>
+                          <span>{diff === null ? "N/A" : `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`}</span>
                         </div>
                       </td>
                     ))}

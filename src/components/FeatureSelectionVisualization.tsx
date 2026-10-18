@@ -245,10 +245,10 @@ export function FeatureSelectionVisualization({ data }: FeatureSelectionVisualiz
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "8px",
                 }}
-                formatter={(value: number, name: string, props: any) => [
+                formatter={(value: number, name: string, props: { payload?: { methodCount?: number; fullFeature?: string } }) => [
                   <>
                     <div>Importance: {value.toFixed(4)}</div>
-                    <div>Selected by {props.payload.methodCount}/{consensusAnalysis?.totalMethods || 5} methods</div>
+                    <div>Selected by {props.payload?.methodCount}/{consensusAnalysis?.totalMethods || 5} methods</div>
                   </>,
                   props.payload.fullFeature
                 ]}

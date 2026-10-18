@@ -55,7 +55,7 @@ export function ReportExport({ data }: ReportExportProps) {
 
   const isValidMetric = (metric: unknown): metric is PermutationMetric => {
     if (!metric || typeof metric !== 'object') return false;
-    const m = metric as any;
+    const m = metric as Record<string, unknown>;
     return toFiniteNumber(m.original) !== undefined;
   };
 

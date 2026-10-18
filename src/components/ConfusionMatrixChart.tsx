@@ -1,3 +1,4 @@
+import { confusionMetrics, metricPercent } from "@/utils/analytics";
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ConfusionMatrixData } from "@/types/ml-results";
@@ -12,15 +13,8 @@ export function ConfusionMatrixChart({ data, modelName }: ConfusionMatrixChartPr
   const total = tp + tn + fp + fn;
 
   const metrics = useMemo(() => {
-    const accuracy = total > 0 ? ((tp + tn) / total * 100).toFixed(1) : "0";
-    const precision = tp + fp > 0 ? (tp / (tp + fp) * 100).toFixed(1) : "0";
-    const recall = tp + fn > 0 ? (tp / (tp + fn) * 100).toFixed(1) : "0"; // Sensitivity
-    const specificity = tn + fp > 0 ? (tn / (tn + fp) * 100).toFixed(1) : "0";
-    const f1 = parseFloat(precision) + parseFloat(recall) > 0 
-      ? (2 * parseFloat(precision) * parseFloat(recall) / (parseFloat(precision) + parseFloat(recall))).toFixed(1)
-      : "0";
-    const npv = tn + fn > 0 ? (tn / (tn + fn) * 100).toFixed(1) : "0"; // Negative Predictive Value
-    return { accuracy, precision, recall, specificity, f1, npv };
+    const raw = confusionMetrics({tp, tn, fp, fn});
+    return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, metricPercent(value)]));
   }, [tp, tn, fp, fn, total]);
 
   return (
@@ -85,27 +79,27 @@ export function ConfusionMatrixChart({ data, modelName }: ConfusionMatrixChartPr
       <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-border">
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Accuracy</p>
-          <p className="font-mono font-semibold text-primary">{metrics.accuracy}%</p>
+          <p className="font-mono font-semibold text-primary">{metrics.accuracy}</p>
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Precision</p>
-          <p className="font-mono font-semibold">{metrics.precision}%</p>
+          <p className="font-mono font-semibold">{metrics.precision}</p>
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Sensitivity</p>
-          <p className="font-mono font-semibold text-success">{metrics.recall}%</p>
+          <p className="font-mono font-semibold text-success">{metrics.recall}</p>
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Specificity</p>
-          <p className="font-mono font-semibold text-info">{metrics.specificity}%</p>
+          <p className="font-mono font-semibold text-info">{metrics.specificity}</p>
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">F1 Score</p>
-          <p className="font-mono font-semibold">{metrics.f1}%</p>
+          <p className="font-mono font-semibold">{metrics.f1}</p>
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">NPV</p>
-          <p className="font-mono font-semibold">{metrics.npv}%</p>
+          <p className="font-mono font-semibold">{metrics.npv}</p>
         </div>
       </div>
     </div>

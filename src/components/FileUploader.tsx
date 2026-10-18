@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Upload, FileJson, AlertCircle, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MLResults } from "@/types/ml-results";
-import { validateMLResultsSchema, formatValidationMessages, type ValidationResult } from "@/utils/jsonSchemaValidator";
+import { parseMLResults, validateMLResultsSchema, formatValidationMessages, type ValidationResult } from "@/utils/jsonSchemaValidator";
 
 interface FileUploaderProps {
   onDataLoaded: (data: MLResults) => void;
@@ -29,7 +29,7 @@ export function FileUploader({ onDataLoaded }: FileUploaderProps) {
       setIsLoading(true);
       try {
         const text = await file.text();
-        const data = JSON.parse(text);
+        const data = parseMLResults(text);
 
         // Validate schema
         const validation = validateMLResultsSchema(data);
@@ -45,8 +45,8 @@ export function FileUploader({ onDataLoaded }: FileUploaderProps) {
         setTimeout(() => {
           onDataLoaded(data as MLResults);
         }, 200);
-      } catch {
-        setError("Failed to parse JSON file");
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Unable to load results file");
       } finally {
         setIsLoading(false);
       }

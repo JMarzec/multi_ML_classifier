@@ -108,7 +108,7 @@ config <- list(
   target_variable = "diagnosis",
   analysis_mode = "full",
   scale_data = SCALE_DATA_DEFAULT,
-  model_scaling <- MODEL_SCALING,
+  model_scaling = MODEL_SCALING,
   seed = 42,
   top_percent = 10,
   feature_selection_method = "stepwise",
@@ -214,159 +214,49 @@ load_and_preprocess_data <- function(config) {
     stop(sprintf("Target variable '%s' not found", config$target_variable))
   }
   
-  # Get sample IDs from expression matrix
+  preprocessing_stats <- list(original_samples = ncol(expr_mat), original_features = nrow(expr_mat),
+    missing_values = sum(is.na(expr_mat)), missing_pct = 100 * sum(is.na(expr_mat)) / length(expr_mat),
+    constant_features_removed = 0L)
   sample_ids <- colnames(expr_mat)
-  log_message(sprintf("Expression matrix has %d samples", length(sample_ids)))
-  
-  # Find sample ID column in annotation (first column or look for common pattern)
   annot_sample_col <- colnames(annot)[1]
+  annot[[annot_sample_col]] <- as.character(annot[[annot_sample_col]])
   annot_samples <- annot[[annot_sample_col]]
-  
-  # Check for target variable
-  if (!config$target_variable %in% colnames(annot)) {
-    stop(sprintf("Target variable '%s' not found in annotation file. Available: %s",
-                 config$target_variable, paste(colnames(annot), collapse = ", ")))
-  }
-  
-  # Find common samples
-  common_samples <- intersect(sample_ids, annot_samples)
-  log_message(sprintf("Found %d common samples between expression matrix and annotation", length(common_samples)))
-  
-  if (length(common_samples) == 0) {
-    stop("No common samples found. Ensure column names in expression matrix match sample IDs in annotation.")
-  }
-  
-  # Filter and align data
-  expr_mat <- expr_mat[, colnames(expr_mat) %in% common_samples, drop = FALSE]
-  annot <- annot[annot[[annot_sample_col]] %in% common_samples, ]
-  
-  # Sort BOTH to ensure alignment, then update sample_ids AFTER sorting
-  expr_mat <- expr_mat[, order(colnames(expr_mat)), drop = FALSE]
-  annot <- annot[order(annot[[annot_sample_col]]), ]
-  
-  # Update sample_ids AFTER sorting to match the sorted order
-  sample_ids <- colnames(expr_mat)
-  
-  # Verify alignment before extracting target
-  if (!identical(sample_ids, annot[[annot_sample_col]])) {
-    log_message("WARNING: Sample order mismatch detected, re-aligning...", "WARN")
-    # Force exact alignment: reorder annot to match expr_mat column order
-    annot <- annot[match(sample_ids, annot[[annot_sample_col]]), ]
-  }
-  
-  log_message(sprintf("Sample alignment verified: %d samples", length(sample_ids)))
-  
-  # Extract target variable
-  y <- factor(annot[[config$target_variable]])
-  
-  # Check for and remove samples with NA in target
-  na_idx <- is.na(y)
-  if (any(na_idx)) {
-    log_message(sprintf("Removing %d samples with NA in target variable", sum(na_idx)), "WARN")
-    keep_samples <- !na_idx
-    expr_mat <- expr_mat[, keep_samples, drop = FALSE]
-    y <- y[keep_samples]
-    sample_ids <- sample_ids[keep_samples]
-  }
-  
-  
-  ## Transpose
-  expr_mat <- as.data.frame(t(expr_mat))
-  
-  # Ensure expr_mat is numeric
-  expr_mat <- as.data.frame(lapply(expr_mat, function(x) {
-    if (is.character(x)) as.numeric(x) else x
-  }))
-  
-  # Remove constant columns
-  constant_cols <- sapply(expr_mat, function(x) length(unique(x[!is.na(x)])) <= 1)
-  if (any(constant_cols)) {
-    log_message(sprintf("Removing %d constant columns", sum(constant_cols)), "WARN")
-    preprocessing_stats$constant_features_removed <- sum(constant_cols)
-    expr_mat <- expr_mat[, !constant_cols]
-  }
-  
-  # Handle missing values
-  if (any(is.na(expr_mat))) {
-    log_message("Imputing missing values with median", "WARN")
-    expr_mat <- as.data.frame(lapply(expr_mat, function(x) {
-      if (is.numeric(x)) x[is.na(x)] <- median(x, na.rm = TRUE)
-      return(x)
-    }))
-  }
-  
-  # Store unscaled expression for boxplot export (subset to current features)
-  X_raw <- expr_mat
-  
-  # --------------------------------------------------
-  # Optional Z-score scaling (per feature)
-  # --------------------------------------------------
-  
-  X_scaled <- expr_mat
-  
-  if (isTRUE(config$scale_data)) {
-    
-    log_message("Preparing scaled data matrix (Z-score per feature)", "INFO")
-    
-    feature_sd <- apply(X_scaled, 2, sd, na.rm = TRUE)
-    nonzero_sd <- feature_sd > 0
-    
-    if (any(!nonzero_sd)) {
-      log_message(sprintf(
-        "Removed %d zero-variance features before scaling",
-        sum(!nonzero_sd)
-      ), "WARN")
-    }
-    
-    X_scaled <- X_scaled[, nonzero_sd, drop = FALSE]
-    
-    X_scaled <- as.data.frame(
-      t(apply(X_scaled, 1, function(x) scale(as.numeric(x))))
-    )
-    
-    colnames(X_scaled) <- colnames(X_raw)[nonzero_sd]
-    rownames(X_scaled) <- rownames(X_raw)
-  }
-  
-  
-  # ------------------------------------------------------------------
-  # Variance-based feature filtering (CRITICAL for speed & stability)
-  # ------------------------------------------------------------------
-  
-  feature_var <- apply(X_scaled, 2, var, na.rm = TRUE)
-  
-  # Remove bottom X_scaled% of variance
-  var_cutoff <- quantile(feature_var, VAR_QUANTILE, na.rm = TRUE)
-  
-  keep_features <- feature_var > var_cutoff
-  
-  log_message(
-    sprintf("Variance filtering: kept %d/%d features (%.1f%%)",
-            sum(keep_features),
-            length(keep_features),
-            100 * sum(keep_features) / length(keep_features)),
-    "INFO"
-  )
-  
-  X_scaled <- X_scaled[, keep_features, drop = FALSE]
-  
-  # Apply caret near-zero variance filter
-  nzv <- nearZeroVar(X_scaled, saveMetrics = TRUE)
-  X_scaled <- X_scaled[, !nzv$nzv, drop = FALSE]
-  
-  log_message(
-    sprintf("Removed %d near-zero variance features",
-            sum(nzv$nzv)),
-    "INFO"
-  )
-  
-  log_message(sprintf("Final data: %d samples, %d features, %d classes",
-                      nrow(X_scaled), ncol(X_scaled), length(levels(y))))
-  log_message(sprintf("Class distribution: %s",
-                      paste(names(table(y)), table(y), sep = "=", collapse = ", ")))
-  
-  unscaled_expr <- X_raw[keep_features, , drop = FALSE]
-  
+  invalid_ids <- function(ids) anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids) > 0L
+  if (invalid_ids(sample_ids) || invalid_ids(annot_samples)) stop("Sample IDs must be nonmissing and unique")
+  sample_ids <- sample_ids[sample_ids %in% annot_samples]
+  if (!length(sample_ids)) stop("No matching samples")
+  expr_mat <- expr_mat[, sample_ids, drop = FALSE]
+  annot <- annot[match(sample_ids, annot_samples), , drop = FALSE]
+  keep_samples <- !is.na(annot[[config$target_variable]])
+  preprocessing_stats$missing_target_samples_removed <- sum(!keep_samples)
+  expr_mat <- expr_mat[, keep_samples, drop = FALSE]
+  annot <- annot[keep_samples, , drop = FALSE]
+  sample_ids <- sample_ids[keep_samples]
+  y <- droplevels(factor(annot[[config$target_variable]]))
+  if (nlevels(y) != 2L) stop("Exactly two observed classes are required")
+  stopifnot(identical(sample_ids, annot[[annot_sample_col]]))
+  expr_mat <- as.data.frame(t(as.matrix(expr_mat)), check.names = FALSE)
+  expr_mat[] <- lapply(expr_mat, function(x) suppressWarnings(as.numeric(as.character(x))))
+  rownames(expr_mat) <- sample_ids
+  expr_mat[] <- lapply(expr_mat, function(x) {x[!is.finite(x)] <- NA_real_; x})
+  constant_cols <- vapply(expr_mat, function(x) length(unique(x[!is.na(x)])) <= 1L, logical(1))
+  preprocessing_stats$constant_features_removed <- sum(constant_cols)
+  expr_mat <- expr_mat[, !constant_cols, drop = FALSE]
+  if (!ncol(expr_mat)) stop("No nonconstant features remain")
+  expr_mat[] <- lapply(expr_mat, function(x) {x[is.na(x)] <- median(x, na.rm = TRUE); x})
+  feature_var <- vapply(expr_mat, var, numeric(1))
+  eligible <- is.finite(feature_var) & feature_var > 0
+  if (!any(eligible)) stop("No variable features remain")
+  var_cutoff <- unname(quantile(feature_var[eligible], VAR_QUANTILE))
+  keep_features <- eligible & feature_var >= var_cutoff
+  X_raw <- expr_mat[, keep_features, drop = FALSE]
+  nzv <- caret::nearZeroVar(X_raw)
+  if (length(nzv)) X_raw <- X_raw[, -nzv, drop = FALSE]
+  if (!ncol(X_raw)) stop("No features remain after filtering")
+  X_scaled <- if (isTRUE(config$scale_data) || any(unlist(config$model_scaling))) as.data.frame(scale(as.matrix(X_raw)), check.names = FALSE) else X_raw
+  unscaled_expr <- X_raw
+  stopifnot(identical(dimnames(X_raw), dimnames(X_scaled)), identical(rownames(X_raw), sample_ids))
+
   # Final consistency check
   if (nrow(X_raw) != length(y) || nrow(X_raw) != length(sample_ids)) {
     stop(sprintf("Data dimension mismatch: X_raw has %d rows, y has %d elements, sample_ids has %d elements",
@@ -379,23 +269,11 @@ load_and_preprocess_data <- function(config) {
   class_dist <- table(y)
   class_dist_list <- setNames(as.numeric(class_dist), names(class_dist))
   
-  preprocessing_stats <- list(
-    original_samples = length(sample_ids),
-    original_features = ncol(X_raw),
-    missing_values = 0,
-    missing_pct = 0,
-    class_distribution = class_dist_list,
-    constant_features_removed = 0,
-    # Full training mode - no train/test split
-    full_training_mode = TRUE,
-    cv_folds = NULL,
-    cv_repeats = NULL,
-    train_samples_per_fold = length(sample_ids),
-    test_samples_per_fold = 0,
-    train_class_distribution = class_dist_list,
-    test_class_distribution = NULL
-  )
-  
+  preprocessing_stats <- c(preprocessing_stats, list(
+    final_samples = nrow(X_raw), final_features = ncol(X_raw), class_distribution = class_dist_list,
+    full_training_mode = TRUE, train_samples_per_fold = length(sample_ids), test_samples_per_fold = 0,
+    train_class_distribution = class_dist_list, test_class_distribution = NULL))
+
   return(list(
     X_raw = X_raw,
     X_scaled = X_scaled,
@@ -505,15 +383,15 @@ train_all_models <- function(X_raw, X_scaled, y, config) {
   log_message("  Training Random Forest...")
   mtry_val <- if (is.null(config$rf_mtry)) max(1, floor(sqrt(ncol(X_raw)))) else config$rf_mtry
   rf_model <- randomForest(x = X_rf, y = y, ntree = config$rf_ntree, mtry = mtry_val, importance = TRUE)
-  rf_pred <- rf_model$predicted
-  rf_prob <- rf_model$votes[, levels(y)[2]]
+  rf_pred <- predict(rf_model, newdata = X_rf, type = "response")
+  rf_prob <- predict(rf_model, newdata = X_rf, type = "prob")[, levels(y)[2]]
   results$rf <- compute_metrics(rf_pred, y, rf_prob)
   results$rf$model <- rf_model
   
   # SVM
   log_message("  Training SVM...")
   gamma_val <- if (is.null(config$svm_gamma)) 1/ncol(X_svm) else config$svm_gamma
-  svm_model <- svm(x = X_svm, y = y, kernel = config$svm_kernel, 
+  svm_model <- svm(x = X_svm, y = y, scale = FALSE, kernel = config$svm_kernel, 
                    cost = config$svm_cost, gamma = gamma_val, probability = TRUE)
   # CRITICAL: Predict on same data used for training (X_svm) to maintain alignment with y
   svm_pred <- predict(svm_model, X_svm, probability = TRUE)
@@ -595,7 +473,10 @@ train_all_models <- function(X_raw, X_scaled, y, config) {
 }
 
 compute_metrics <- function(pred, actual, prob) {
-  cm <- confusionMatrix(pred, actual)
+  actual <- factor(actual, levels = levels(actual))
+  pred <- factor(as.character(pred), levels = levels(actual))
+  if (length(pred) != length(actual) || anyNA(pred)) stop("Invalid aligned predictions")
+  cm <- confusionMatrix(pred, actual, positive = levels(actual)[2], mode = "everything")
   
   # Calculate all metrics
   accuracy <- as.numeric(cm$overall["Accuracy"])
@@ -603,15 +484,15 @@ compute_metrics <- function(pred, actual, prob) {
   specificity <- as.numeric(cm$byClass["Specificity"])
   precision <- as.numeric(cm$byClass["Pos Pred Value"])
   
-  f1 <- 2 * (precision * sensitivity) / (precision + sensitivity)
-  if (is.na(f1) || !is.finite(f1)) f1 <- 0
+  f1_den <- 2 * cm$table[2, 2] + cm$table[2, 1] + cm$table[1, 2]
+  f1 <- if (f1_den > 0) 2 * cm$table[2, 2] / f1_den else NA_real_
   
   balanced_accuracy <- (sensitivity + specificity) / 2
   kappa <- as.numeric(cm$overall["Kappa"])
   
   # ROC and AUROC
   roc_obj <- tryCatch({
-    roc(actual, prob, quiet = TRUE)
+    roc(actual, prob, levels = levels(actual), direction = "<", quiet = TRUE)
   }, error = function(e) NULL)
   
   auroc <- if (!is.null(roc_obj)) as.numeric(auc(roc_obj)) else NA
@@ -663,13 +544,19 @@ run_permutation_test <- function(X_raw, X_scaled, y, config) {
   null_accuracy <- list(rf = numeric(), svm = numeric(), xgboost = numeric(),
                         knn = numeric(), mlp = numeric(), soft_vote = numeric())
   
-  for (i in 1:config$n_permutations) {
+  permutation_labels <- lapply(seq_len(config$n_permutations), function(i) y[sample.int(length(y))])
+  training_seeds <- sample.int(.Machine$integer.max, config$n_permutations)
+  for (i in seq_len(config$n_permutations)) {
     show_progress(i, config$n_permutations, "Permutation test")
     
-    y_perm <- sample(y)
+    y_perm <- permutation_labels[[i]]
     
     # Train models on permuted data
-    perm_results <- train_all_models(X_raw, X_scaled, y_perm, config)
+    perm_config <- config
+    perm_config$seed <- training_seeds[i]
+    fs <- perform_feature_selection(X_raw, y_perm, perm_config)
+    features <- fs$selected_features
+    perm_results <- train_all_models(X_raw[, features, drop = FALSE], X_scaled[, features, drop = FALSE], y_perm, perm_config)
     
     for (method in names(null_aurocs)) {
       if (!is.null(perm_results[[method]])) {
@@ -1150,6 +1037,9 @@ run_survival_analysis <- function(X, y, sample_ids, results, config, annot, anno
       
       model_risk_results[[model_name]] <- list(
         model = model_name,
+        cutoff = as.numeric(median_prob),
+        high_group_rule = "positive_class_probability > cutoff",
+        cox_predictor = "continuous_positive_class_probability",
         stats = list(
           logrank_p = logrank_p,
           cox_hr = cox_hr,
@@ -1228,7 +1118,7 @@ build_json_output <- function(data, results, feature_selection, permutation_resu
     if (length(permutation_results$null_aurocs[[method]]) > 0) {
       null_auroc <- permutation_results$null_aurocs[[method]]
       actual_auroc <- results[[method]]$auroc
-      p_val <- mean(null_auroc >= actual_auroc)
+      p_val <- if (all(is.finite(null_auroc)) && is.finite(actual_auroc)) (1 + sum(null_auroc >= actual_auroc))/(1 + length(null_auroc)) else NA_real_
       
       perm_testing[[paste0(method, "_auroc")]] <- list(
         permuted_mean = mean(null_auroc),
@@ -1303,6 +1193,7 @@ run_pipeline <- function(config) {
   log_message("WARNING: Training metrics only - validate externally!")
   log_message(paste(rep("=", 60), collapse = ""))
   
+  config$prediction_regime <- "in_sample_resubstitution_not_validation"
   # Load data
   data <- load_and_preprocess_data(config)
   
@@ -1324,7 +1215,7 @@ run_pipeline <- function(config) {
   )
   
   # Permutation testing
-  permutation_results <- run_permutation_test(X_selected_raw, X_selected_scaled, data$y, config)
+  permutation_results <- run_permutation_test(data$X_raw, data$X_scaled, data$y, config)
   
   # Calibration curves
   calibration_curves <- compute_calibration_curves(results, data$y)
