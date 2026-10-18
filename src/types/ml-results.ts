@@ -189,6 +189,8 @@ export interface PerGeneSurvival {
 
 export interface ModelRiskScoreSurvival {
   model: string;
+  cutoff?: number;
+  high_group_rule?: string;
   stats: SurvivalStats;
   km_curve_high: KaplanMeierPoint[];
   km_curve_low: KaplanMeierPoint[];

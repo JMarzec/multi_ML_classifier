@@ -1,6 +1,8 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 
+import { parseMLResults } from "../../../utils/jsonSchemaValidator";
+
 type AnyRec = Record<string, unknown>;
 
 function num(v: unknown): number | null {
@@ -49,8 +51,8 @@ export default defineTool({
     let a: AnyRec;
     let b: AnyRec;
     try {
-      a = JSON.parse(json_a) as AnyRec;
-      b = JSON.parse(json_b) as AnyRec;
+      a = parseMLResults(json_a) as unknown as AnyRec;
+      b = parseMLResults(json_b) as unknown as AnyRec;
     } catch (e) {
       return {
         content: [{ type: "text", text: `Invalid JSON: ${(e as Error).message}` }],

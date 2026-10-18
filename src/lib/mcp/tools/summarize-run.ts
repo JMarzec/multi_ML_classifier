@@ -1,6 +1,9 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 
+import { parseMLResults } from "../../../utils/jsonSchemaValidator";
+import type { MLResults } from "../../../types/ml-results";
+
 type AnyRec = Record<string, unknown>;
 
 function num(v: unknown): number | null {
@@ -28,9 +31,9 @@ export default defineTool({
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: ({ json, top_features }) => {
-    let data: AnyRec;
+    let data: MLResults;
     try {
-      data = JSON.parse(json) as AnyRec;
+      data = parseMLResults(json);
     } catch (e) {
       return {
         content: [{ type: "text", text: `Invalid JSON: ${(e as Error).message}` }],
@@ -39,9 +42,9 @@ export default defineTool({
     }
 
     const topN = top_features ?? 20;
-    const meta = (data.metadata as AnyRec) ?? {};
-    const cfg = (meta.config as AnyRec) ?? {};
-    const prep = (data.preprocessing as AnyRec) ?? {};
+    const meta = data.metadata;
+    const cfg = meta.config;
+    const prep = data.preprocessing;
     const perf = (data.model_performance as AnyRec) ?? {};
     const features = Array.isArray(data.selected_features)
       ? (data.selected_features as string[])
@@ -78,19 +81,19 @@ export default defineTool({
     lines.push(`- R version: ${meta.r_version ?? "n/a"}`);
     lines.push(`- Target variable: ${cfg.target_variable ?? "n/a"}`);
     lines.push(
-      `- Mode: ${cfg.analysis_mode ?? (prep.full_training_mode ? "full_training" : "cv")}`
+      `- Mode: ${cfg.analysis_mode ?? (prep?.full_training_mode ? "full_training" : "cv")}`
     );
     if (cfg.n_folds || cfg.n_repeats) {
       lines.push(`- CV: ${cfg.n_folds ?? "?"} folds × ${cfg.n_repeats ?? "?"} repeats`);
     }
-    if (cfg.train_ratio !== undefined) lines.push(`- Train ratio: ${cfg.train_ratio}`);
+    if (data.preprocessing?.train_ratio !== undefined) lines.push(`- Train ratio: ${data.preprocessing.train_ratio}`);
     lines.push(`- Feature selection: ${cfg.feature_selection_method ?? "n/a"} (max ${cfg.max_features ?? "n/a"})`);
     lines.push("");
     lines.push(`## Preprocessing`);
-    lines.push(`- Samples: ${prep.original_samples ?? "n/a"}`);
-    lines.push(`- Features: ${prep.original_features ?? "n/a"}`);
-    lines.push(`- Missing: ${prep.missing_values ?? "n/a"} (${prep.missing_pct ?? "n/a"}%)`);
-    lines.push(`- Class distribution: ${JSON.stringify(prep.class_distribution ?? {})}`);
+    lines.push(`- Samples: ${prep?.original_samples ?? "n/a"}`);
+    lines.push(`- Features: ${prep?.original_features ?? "n/a"}`);
+    lines.push(`- Missing: ${prep?.missing_values ?? "n/a"} (${prep?.missing_pct ?? "n/a"}%)`);
+    lines.push(`- Class distribution: ${JSON.stringify(prep?.class_distribution ?? {})}`);
     lines.push("");
     lines.push(`## Model Performance (mean)`);
     lines.push(`| Model | AUROC | Accuracy | F1 | Sens | Spec |`);
@@ -111,8 +114,8 @@ export default defineTool({
     return {
       content: [{ type: "text", text: lines.join("\n") }],
       structuredContent: {
-        metadata: meta,
-        preprocessing: prep,
+        metadata: {generated_at: meta.generated_at, r_version: meta.r_version, config: {target_variable: cfg.target_variable, analysis_mode: cfg.analysis_mode ?? null, n_folds: cfg.n_folds, n_repeats: cfg.n_repeats}},
+        preprocessing: prep ? {original_samples: prep.original_samples, original_features: prep.original_features, missing_values: prep.missing_values, missing_pct: prep.missing_pct, class_distribution: {...prep.class_distribution}} : null,
         models: modelRows,
         best_model_by_auroc: bestByAuroc ?? null,
         selected_features_top: features.slice(0, topN),

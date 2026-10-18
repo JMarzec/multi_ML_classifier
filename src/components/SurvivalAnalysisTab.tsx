@@ -1,3 +1,6 @@
+import { ForestPlotSVG } from "./SurvivalForestPlot";
+import { Input } from "@/components/ui/input";
+import { toFiniteNumber, formatPValue, formatNumber, normalizePerGene, normalizeModelRiskScores } from "@/utils/analytics";
 import { useMemo, useState } from "react";
 import {
   LineChart,
@@ -33,276 +36,8 @@ const MODEL_COLORS: Record<string, string> = {
 const HIGH_RISK_COLOR = "hsl(var(--destructive))";
 const LOW_RISK_COLOR = "hsl(var(--success))";
 
-// Forest Plot SVG component with proper box-plot style markers
-interface ForestPlotEntry {
-  gene: string;
-  hr: number;
-  hr_lower: number;
-  hr_upper: number;
-  p_value: number;
-  significant: boolean;
-}
-
-const ForestPlotSVG = ({ data }: { data: ForestPlotEntry[] }) => {
-  const width = 900;
-  const rowHeight = 22;
-  const height = Math.max(400, data.length * rowHeight + 100);
-  const margin = { top: 40, right: 180, left: 140, bottom: 60 };
-  const plotWidth = width - margin.left - margin.right;
-  const plotHeight = height - margin.top - margin.bottom;
-
-  // Calculate x-axis domain
-  const allValues = data.flatMap((d) => [d.hr_lower, d.hr_upper, d.hr]);
-  const minVal = Math.min(...allValues, 0.1);
-  const maxVal = Math.max(...allValues, 2);
-  const xMin = Math.max(0.01, minVal * 0.8);
-  const xMax = maxVal * 1.2;
-
-  // Use log scale for HR visualization (common in forest plots)
-  const logScale = (value: number) => {
-    const logMin = Math.log10(xMin);
-    const logMax = Math.log10(xMax);
-    const logVal = Math.log10(Math.max(value, xMin));
-    return ((logVal - logMin) / (logMax - logMin)) * plotWidth;
-  };
-
-  // Y position for each gene
-  const yPosition = (index: number) => {
-    return (index + 0.5) * (plotHeight / data.length);
-  };
-
-  // Generate x-axis ticks (log scale friendly values)
-  const generateTicks = () => {
-    const ticks: number[] = [];
-    const logMin = Math.log10(xMin);
-    const logMax = Math.log10(xMax);
-    
-    // Add nice round values
-    [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].forEach((v) => {
-      if (v >= xMin && v <= xMax) ticks.push(v);
-    });
-    
-    return ticks;
-  };
-
-  const xTicks = generateTicks();
-  const hrOnePosition = logScale(1);
-
-  return (
-    <svg 
-      viewBox={`0 0 ${width} ${height}`} 
-      className="w-full max-w-4xl mx-auto"
-      style={{ minHeight: height }}
-    >
-      {/* Background */}
-      <rect width={width} height={height} fill="hsl(var(--card))" rx={8} />
-
-      {/* Plot area */}
-      <g transform={`translate(${margin.left}, ${margin.top})`}>
-        {/* Grid lines */}
-        {xTicks.map((tick) => (
-          <line
-            key={tick}
-            x1={logScale(tick)}
-            y1={0}
-            x2={logScale(tick)}
-            y2={plotHeight}
-            stroke="hsl(var(--border))"
-            strokeDasharray={tick === 1 ? "none" : "3 3"}
-            strokeWidth={tick === 1 ? 2 : 1}
-            strokeOpacity={tick === 1 ? 0.8 : 0.4}
-          />
-        ))}
-
-        {/* Horizontal grid lines for each gene */}
-        {data.map((_, i) => (
-          <line
-            key={i}
-            x1={0}
-            y1={yPosition(i)}
-            x2={plotWidth}
-            y2={yPosition(i)}
-            stroke="hsl(var(--border))"
-            strokeOpacity={0.2}
-          />
-        ))}
-
-        {/* HR = 1 reference line (emphasized) */}
-        <line
-          x1={hrOnePosition}
-          y1={-10}
-          x2={hrOnePosition}
-          y2={plotHeight + 10}
-          stroke="hsl(var(--muted-foreground))"
-          strokeWidth={2}
-          strokeDasharray="8 4"
-        />
-        <text
-          x={hrOnePosition}
-          y={-20}
-          textAnchor="middle"
-          className="text-xs fill-muted-foreground font-medium"
-        >
-          HR = 1
-        </text>
-
-        {/* Forest plot entries */}
-        {data.map((entry, i) => {
-          const y = yPosition(i);
-          const hrX = logScale(entry.hr);
-          const lowerX = logScale(entry.hr_lower);
-          const upperX = logScale(entry.hr_upper);
-          const color = entry.hr > 1 ? HIGH_RISK_COLOR : LOW_RISK_COLOR;
-          const opacity = entry.significant ? 1 : 0.5;
-
-          return (
-            <g key={entry.gene} opacity={opacity}>
-              {/* Gene label */}
-              <text
-                x={-10}
-                y={y}
-                textAnchor="end"
-                alignmentBaseline="middle"
-                className="text-xs fill-foreground font-mono"
-              >
-                {entry.gene.length > 18 ? entry.gene.slice(0, 16) + "..." : entry.gene}
-              </text>
-
-              {/* Confidence interval line */}
-              <line
-                x1={lowerX}
-                y1={y}
-                x2={upperX}
-                y2={y}
-                stroke={color}
-                strokeWidth={2}
-              />
-
-              {/* CI caps */}
-              <line
-                x1={lowerX}
-                y1={y - 5}
-                x2={lowerX}
-                y2={y + 5}
-                stroke={color}
-                strokeWidth={2}
-              />
-              <line
-                x1={upperX}
-                y1={y - 5}
-                x2={upperX}
-                y2={y + 5}
-                stroke={color}
-                strokeWidth={2}
-              />
-
-              {/* Point estimate (diamond/square marker) */}
-              <rect
-                x={hrX - 5}
-                y={y - 5}
-                width={10}
-                height={10}
-                fill={color}
-                stroke="hsl(var(--background))"
-                strokeWidth={1}
-                transform={`rotate(45, ${hrX}, ${y})`}
-              />
-
-              {/* HR value label on right */}
-              <text
-                x={plotWidth + 10}
-                y={y}
-                textAnchor="start"
-                alignmentBaseline="middle"
-                className="text-xs fill-muted-foreground font-mono"
-              >
-                {entry.hr.toFixed(2)} ({entry.hr_lower.toFixed(2)}-{entry.hr_upper.toFixed(2)})
-              </text>
-            </g>
-          );
-        })}
-
-        {/* X-axis */}
-        <g transform={`translate(0, ${plotHeight})`}>
-          <line x1={0} y1={0} x2={plotWidth} y2={0} stroke="hsl(var(--muted-foreground))" />
-          {xTicks.map((tick) => (
-            <g key={tick} transform={`translate(${logScale(tick)}, 0)`}>
-              <line y1={0} y2={6} stroke="hsl(var(--muted-foreground))" />
-              <text
-                y={20}
-                textAnchor="middle"
-                className="text-xs fill-muted-foreground"
-              >
-                {tick}
-              </text>
-            </g>
-          ))}
-        </g>
-
-        {/* Labels for risk interpretation - positioned above axis label */}
-        <text
-          x={hrOnePosition / 2}
-          y={plotHeight + 25}
-          textAnchor="middle"
-          className="text-xs fill-success font-medium"
-        >
-          ← Protective
-        </text>
-        <text
-          x={hrOnePosition + (plotWidth - hrOnePosition) / 2}
-          y={plotHeight + 25}
-          textAnchor="middle"
-          className="text-xs fill-destructive font-medium"
-        >
-          Risk →
-        </text>
-
-        {/* X-axis label - positioned below risk labels */}
-        <text
-          x={plotWidth / 2}
-          y={plotHeight + 50}
-          textAnchor="middle"
-          className="text-sm fill-muted-foreground font-medium"
-        >
-          Hazard Ratio (log scale)
-        </text>
-      </g>
-
-      {/* Column header for HR values */}
-      <text
-        x={margin.left + plotWidth + 10}
-        y={margin.top - 15}
-        textAnchor="start"
-        className="text-xs fill-muted-foreground font-medium"
-      >
-        HR (95% CI)
-      </text>
-    </svg>
-  );
-};
-
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
-
-function formatPValue(p: unknown): string {
-  const n = toFiniteNumber(p);
-  if (n == null) return "NA";
-  return n < 0.001 ? n.toExponential(2) : n.toFixed(4);
-}
-
-function formatNumber(n: unknown, decimals: number = 3): string {
-  const v = toFiniteNumber(n);
-  if (v == null) return "NA";
-  return v.toFixed(decimals);
-}
-
 export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
+  const [geneSearch, setGeneSearch] = useState("");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
 
@@ -312,73 +47,20 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
   const hasValidSurvivalData = survivalData && 
     typeof survivalData === 'object' && 
     Object.keys(survivalData).length > 0 &&
-    (survivalData.per_gene || survivalData.model_risk_scores);
-
-  if (!hasValidSurvivalData) {
-    return (
-      <div className="bg-card rounded-xl p-12 border border-border text-center">
-        <Heart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Survival Analysis Data</h3>
-        <p className="text-muted-foreground max-w-md mx-auto">
-          Survival analysis requires time-to-event data (survival time and event status columns) in your annotation file. 
-          Configure the R script with <code className="bg-muted px-1 rounded">--time</code> and <code className="bg-muted px-1 rounded">--event</code> parameters.
-        </p>
-      </div>
-    );
-  }
+    (survivalData?.per_gene || survivalData?.model_risk_scores);
 
   // Helper to normalize per_gene from array or object format
-  function normalizePerGene(raw: unknown): PerGeneSurvival[] {
-    if (Array.isArray(raw)) {
-      return raw
-        .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
-        .map((g) => ({
-          ...(g as any),
-          logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
-          cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
-          cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
-          cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
-          cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
-          high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
-          low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
-        })) as PerGeneSurvival[];
-    }
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      // Object keyed by gene name
-      return Object.values(raw)
-        .filter((g) => typeof (g as any)?.gene === "string" && (g as any).gene.length > 0)
-        .map((g) => ({
-          ...(g as any),
-          logrank_p: toFiniteNumber((g as any).logrank_p) ?? Number.NaN,
-          cox_hr: toFiniteNumber((g as any).cox_hr) ?? Number.NaN,
-          cox_hr_lower: toFiniteNumber((g as any).cox_hr_lower) ?? Number.NaN,
-          cox_hr_upper: toFiniteNumber((g as any).cox_hr_upper) ?? Number.NaN,
-          cox_p: toFiniteNumber((g as any).cox_p) ?? Number.NaN,
-          high_median_surv: toFiniteNumber((g as any).high_median_surv) ?? null,
-          low_median_surv: toFiniteNumber((g as any).low_median_surv) ?? null,
-        })) as PerGeneSurvival[];
-    }
-    return [];
-  }
+  
 
   // Helper to normalize model_risk_scores from array or object format
-  function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
-    if (Array.isArray(raw)) {
-      return raw.filter((m) => typeof (m as any)?.model === "string");
-    }
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      // Object keyed by model name
-      return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-    }
-    return [];
-  }
+  
 
   // Normalize and sort genes by significance (Cox p-value)
   const sortedGenes = useMemo(() => {
-    const normalized = normalizePerGene(survivalData.per_gene);
+    const normalized = normalizePerGene(survivalData?.per_gene);
     const pForSort = (p: number) => (Number.isFinite(p) ? p : Number.POSITIVE_INFINITY);
     return [...normalized].sort((a, b) => pForSort(a.cox_p) - pForSort(b.cox_p));
-  }, [survivalData.per_gene]);
+  }, [survivalData?.per_gene]);
 
   const significantGenes = sortedGenes.filter((g) => Number.isFinite(g.cox_p) && g.cox_p < 0.05);
 
@@ -407,9 +89,24 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
 
   // Model risk score survival data (handles both array and object formats)
   const modelSurvivalData = useMemo(() => {
-    return normalizeModelRiskScores(survivalData.model_risk_scores);
-  }, [survivalData.model_risk_scores]);
+    return normalizeModelRiskScores(survivalData?.model_risk_scores);
+  }, [survivalData?.model_risk_scores]);
 
+  if (!hasValidSurvivalData || !survivalData) {
+    return (
+      <div className="bg-card rounded-xl p-12 border border-border text-center">
+        <Heart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-semibold mb-2">No Survival Analysis Data</h3>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          Survival analysis requires time-to-event data (survival time and event status columns) in your annotation file. 
+          Configure the R script with <code className="bg-muted px-1 rounded">--time</code> and <code className="bg-muted px-1 rounded">--event</code> parameters.
+        </p>
+      </div>
+    );
+  }
+
+  const activeGene = sortedGenes.find(g => g.gene === selectedGene);
+  const activeModel = modelSurvivalData.find(m => m.model === selectedModel);
   return (
     <div className="space-y-6">
       {/* Header Info */}
@@ -476,8 +173,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
               <CardTitle className="text-base">Select Gene/Feature for Survival Curve</CardTitle>
             </CardHeader>
             <CardContent>
+              <Input aria-label="Search survival genes" placeholder="Search genes" value={geneSearch} onChange={e => setGeneSearch(e.target.value)} className="mb-3" />
               <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto">
-                {sortedGenes.slice(0, 30).map((gene) => {
+                {sortedGenes.filter(g => g.gene.toLowerCase().includes(geneSearch.toLowerCase())).map((gene) => {
                   const isSig = Number.isFinite(gene.cox_p) && gene.cox_p < 0.05;
                   return (
                     <Badge
@@ -493,9 +191,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                 })}
               </div>
 
-              {selectedGene && sortedGenes.find(g => g.gene === selectedGene) && (
+              {activeGene && (
                 <KaplanMeierCurve
-                  gene={sortedGenes.find(g => g.gene === selectedGene)!}
+                  gene={activeGene}
                 />
               )}
 
@@ -560,7 +258,7 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedGenes.slice(0, 50).map((gene) => (
+                    {sortedGenes.map((gene) => (
                       <tr
                         key={gene.gene}
                         className={`border-b border-border/50 hover:bg-muted/30 ${gene.cox_p < 0.05 ? 'bg-primary/5' : ''}`}
@@ -613,11 +311,11 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
 
                 <div className="flex flex-wrap gap-2 mb-4">
                   {modelSurvivalData.map((m) => {
-                    const modelName = String((m as any)?.model ?? "");
-                    const coxP = toFiniteNumber((m as any)?.stats?.cox_p);
+                    const modelName = m.model;
+                    const coxP = toFiniteNumber(m.stats.cox_p);
                     return (
                       <Badge
-                        key={modelName || Math.random().toString(16).slice(2)}
+                        key={modelName}
                         variant={selectedModel === modelName ? "default" : "outline"}
                         className="cursor-pointer"
                         onClick={() => setSelectedModel(modelName)}
@@ -629,9 +327,9 @@ export function SurvivalAnalysisTab({ data }: SurvivalAnalysisTabProps) {
                   })}
                 </div>
 
-                {selectedModel && modelSurvivalData.find(m => m.model === selectedModel) && (
+                {activeModel && (
                   <ModelKaplanMeierCurve
-                    data={modelSurvivalData.find(m => m.model === selectedModel)!}
+                    data={activeModel}
                   />
                 )}
 
@@ -924,7 +622,7 @@ function ModelKaplanMeierCurve({ data }: { data: ModelRiskScoreSurvival }) {
           <Info className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             <strong className="text-success">Prognostic Value:</strong> The {data.model?.toUpperCase() ?? 'MODEL'} model's risk score significantly stratifies patients by survival (p &lt; 0.05).
-            High-risk patients show {(data.stats.cox_hr ?? 1) > 1 ? `${formatNumber(data.stats.cox_hr, 1)}x higher` : `${formatNumber(data.stats.cox_hr ? 1/data.stats.cox_hr : 1, 1)}x lower`} hazard compared to low-risk patients.
+            The Cox hazard ratio is {formatNumber(data.stats.cox_hr, 2)} per 1.0 increase in continuous positive-class probability; it is not a high-versus-low cohort ratio.
           </p>
         </div>
       )}

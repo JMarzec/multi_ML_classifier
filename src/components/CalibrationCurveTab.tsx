@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
-import type { MLResults } from "@/types/ml-results";
+import type { MLResults, CalibrationCurvePoint } from "@/types/ml-results";
 
 interface CalibrationCurveTabProps {
   data: MLResults;
@@ -22,17 +22,17 @@ export function CalibrationCurveTab({ data }: CalibrationCurveTabProps) {
   const hasExported = !!data.calibration_curves && Object.keys(data.calibration_curves).length > 0;
 
   // Helper to normalize calibration data (could be array or object from R)
-  const normalizeCalibrationArray = (val: unknown): any[] => {
+  const normalizeCalibrationArray = (val: unknown): CalibrationCurvePoint[] => {
     if (!val) return [];
     if (Array.isArray(val)) return val;
-    if (typeof val === 'object') return Object.values(val);
+    if (typeof val === 'object') return Object.values(val).filter((v): v is CalibrationCurvePoint => !!v && typeof v === "object" && "bin" in v);
     return [];
   };
 
   const calibrationData: CalibrationPoint[] = (() => {
-    if (hasExported) {
+    if (hasExported && data.calibration_curves) {
       // Normalize exported calibration curves into the chart shape.
-      const byModel = data.calibration_curves!;
+      const byModel = data.calibration_curves;
 
       // Build a union of bins based on soft_vote (preferred) or first available model
       const rawBase = byModel.soft_vote ?? byModel.rf ?? Object.values(byModel)[0] ?? [];
@@ -46,7 +46,7 @@ export function CalibrationCurveTab({ data }: CalibrationCurveTabProps) {
         const getPct = (k: string) => {
           const rawArr = (byModel as Record<string, unknown>)[k];
           const arr = normalizeCalibrationArray(rawArr);
-          const match = arr.find((x) => x.bin === (p as any).bin);
+          const match = arr.find((x) => x.bin === p.bin);
           return match ? Number(match.frac_pos_pct) : null;
         };
 

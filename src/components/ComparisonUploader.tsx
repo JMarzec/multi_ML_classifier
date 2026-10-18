@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { MLResults } from "@/types/ml-results";
 
+import { parseMLResults } from "@/utils/jsonSchemaValidator";
+
 const MAX_FILES = 4;
 
 const RUN_LABELS = ["Run A", "Run B", "Run C", "Run D"];
@@ -46,16 +48,12 @@ export function ComparisonUploader({ onFilesLoaded, currentFiles }: ComparisonUp
       setIsLoading(true);
       try {
         const text = await file.text();
-        const data = JSON.parse(text) as MLResults;
+        const data = parseMLResults(text);
 
-        if (!data.model_performance || !data.metadata) {
-          setError("Invalid file format");
-          return;
-        }
 
         onFilesLoaded([...currentFiles, { name: file.name, data }]);
-      } catch {
-        setError("Failed to parse JSON file");
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Unable to load results file");
       } finally {
         setIsLoading(false);
       }

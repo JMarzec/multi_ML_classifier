@@ -1,3 +1,4 @@
+import { toFiniteNumber, formatPValue, formatNumber, normalizePerGene, normalizeModelRiskScores , patientRiskCohort } from "@/utils/analytics";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,26 +21,11 @@ interface ClinicalReportExportProps {
   data: MLResults;
 }
 
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
 
-function formatPValue(p: unknown): string {
-  const n = toFiniteNumber(p);
-  if (n == null) return "NA";
-  return n < 0.001 ? n.toExponential(2) : n.toFixed(4);
-}
 
-function formatNumber(n: unknown, decimals: number = 3): string {
-  const v = toFiniteNumber(n);
-  if (v == null) return "NA";
-  return v.toFixed(decimals);
-}
+
+
+
 
 function formatPercent(n: unknown): string {
   const v = toFiniteNumber(n);
@@ -47,25 +33,9 @@ function formatPercent(n: unknown): string {
   return `${(v * 100).toFixed(1)}%`;
 }
 
-function normalizePerGene(raw: unknown): PerGeneSurvival[] {
-  if (Array.isArray(raw)) {
-    return raw.filter((g) => typeof (g as any)?.gene === "string") as PerGeneSurvival[];
-  }
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.values(raw).filter((g) => typeof (g as any)?.gene === "string") as PerGeneSurvival[];
-  }
-  return [];
-}
 
-function normalizeModelRiskScores(raw: unknown): ModelRiskScoreSurvival[] {
-  if (Array.isArray(raw)) {
-    return raw.filter((m) => typeof (m as any)?.model === "string");
-  }
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.values(raw).filter((m) => typeof (m as any)?.model === "string") as ModelRiskScoreSurvival[];
-  }
-  return [];
-}
+
+
 
 export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -139,7 +109,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
     // Get best model
     const bestModel = Object.entries(data.model_performance)
       .filter(([, metrics]) => metrics?.auroc)
-      .sort((a, b) => (b[1]!.auroc!.mean || 0) - (a[1]!.auroc!.mean || 0))[0];
+      .sort((a, b) => (b[1]?.auroc?.mean ?? -Infinity) - (a[1]?.auroc?.mean ?? -Infinity))[0];
 
     let html = `
 <!DOCTYPE html>
@@ -210,8 +180,8 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 
     // Generate report for each patient
     patients.forEach((patient) => {
-      const patientId = (patient as any).id || patient.sample_id || `Sample_${patient.sample_index}`;
-      const confidence = patient.confidence || patient.ensemble_probability || 0;
+      const patientId = ("id" in patient ? patient.id : undefined) || patient.sample_id || `Sample_${patient.sample_index}`;
+      const confidence = patient.confidence ?? patient.ensemble_probability ?? 0;
       const isCorrect = patient.correct;
       const riskScore0 = patient.risk_score_class_0;
       const riskScore1 = patient.risk_score_class_1;
@@ -292,8 +262,8 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
       const rocSvg = buildSingleRunROCSVG(data);
       
       // Determine patient risk group based on ensemble probability
-      const patientProb = patient.ensemble_probability || patient.confidence || 0;
-      const patientRiskGroup: "high" | "low" = patientProb >= 0.5 ? "high" : "low";
+      const patientProb = patient.ensemble_probability ?? 0;
+      const patientRiskGroup = patientRiskCohort(data, patient);
       
       // Use actual patient survival time and event data if available
       const patientSurvTime = patient.surv_time;
@@ -315,7 +285,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
           ? `Time: ${patientSurvTime.toFixed(1)}, ${patientSurvEvent ? "Event occurred" : "Censored"}`
           : `Risk group based on ensemble probability of ${(patientProb * 100).toFixed(1)}%`;
         html += `
-      <h2>📈 Survival Curves - Patient Risk Group: <span style="color: ${patientRiskGroup === 'high' ? '#dc2626' : '#16a34a'}; font-weight: 700;">${patientRiskGroup.toUpperCase()}</span></h2>
+      <h2>📈 Survival Curves - Patient Risk Group: <span style="color: ${patientRiskGroup === 'high' ? '#dc2626' : '#16a34a'}; font-weight: 700;">${patientRiskGroup?.toUpperCase() ?? "UNAVAILABLE (CUTOFF NOT EXPORTED)"}</span></h2>
       <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">${survivalNote}</p>
       <div style="text-align: center; margin: 1rem 0;">
         ${kmSvg}
@@ -327,7 +297,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
         <div style="font-size: 0.75rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
           <span style="color: #16a34a; font-weight: bold;">━━</span> Low Risk Group
         </div>
-        ${hasPatientSurvival ? `
+        ${hasPatientSurvival && patientRiskGroup ? `
         <div style="font-size: 0.75rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
           <span style="font-weight: bold; color: #7c3aed;">▲</span> Patient (Event Occurred)
         </div>
@@ -429,7 +399,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 `;
 
           modelSurvivalData.forEach((model) => {
-            const stats = model.stats || {} as any;
+            const stats = model.stats;
             const coxP = toFiniteNumber(stats.cox_p);
             const isPrognostic = coxP != null && coxP < 0.05;
             html += `
@@ -487,7 +457,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 
       html += `
       <div class="footer">
-        <p>AccelBio Multi-Method ML Classifier | Analysis: ${data.metadata.config.target_variable} | R ${data.metadata.r_version}</p>
+        <p>Multi-Method ML Classifier • Powered by <a href="https://accelbio.pt/" target="_blank" rel="noopener noreferrer">AccelBio</a></p>
       </div>
     </div>
 `;
@@ -509,7 +479,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 
     try {
       const patients = allPatients.filter((p) => selectedPatients.includes(p.id));
-      const htmlContent = generateClinicalReport(patients as any);
+      const htmlContent = generateClinicalReport(patients);
 
       if (format === "html") {
         const blob = new Blob([htmlContent], { type: "text/html" });
@@ -528,6 +498,10 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
         });
       } else {
         const printWindow = window.open("", "_blank");
+        if (!printWindow) {
+          toast({ title: "Popup blocked", description: "Allow popups and retry, or download the HTML report.", variant: "destructive" });
+          return;
+        }
         if (printWindow) {
           printWindow.document.write(htmlContent);
           printWindow.document.close();
@@ -611,6 +585,8 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
                 >
                   <input
                     type="checkbox"
+                    aria-label={`Select patient ${patient.id}`}
+                    onClick={e => e.stopPropagation()}
                     checked={selectedPatients.includes(patient.id)}
                     onChange={() => togglePatient(patient.id)}
                     className="rounded"
