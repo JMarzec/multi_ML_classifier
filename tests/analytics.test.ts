@@ -21,6 +21,10 @@ describe("results ingestion", () => {
   });
 });
 describe("scientific selectors", () => {
+  test("legacy NA metric summaries become unavailable rather than crashing uploads", () => {
+    const result = parseMLResults(JSON.stringify({...run,model_performance:{rf:{accuracy:{mean:.7},auroc:{mean:"NA"}}}}));
+    expect(result.model_performance.rf?.auroc).toBeUndefined();
+  });
   test("positive-class counts agree with sensitivity and precision", () => {
     const metrics = confusionMetrics({tn: 8, fp: 2, fn: 1, tp: 1});
     expect(metrics.recall).toBe(.5);

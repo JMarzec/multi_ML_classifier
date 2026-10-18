@@ -362,11 +362,11 @@ train_all_models <- function(X_raw, X_scaled, y, config) {
   
   results <- list()
   
-  X_rf  <- if (isTRUE(config$model_scaling$rf)) X_scaled else X_raw
-  X_svm <- if (isTRUE(config$model_scaling$svm)) X_scaled else X_raw
-  X_xgb <- if (isTRUE(config$model_scaling$xgboost)) X_scaled else X_raw
-  X_knn <- if (isTRUE(config$model_scaling$knn)) X_scaled else X_raw
-  X_mlp <- if (isTRUE(config$model_scaling$mlp)) X_scaled else X_raw
+  X_rf  <- if (isTRUE(config$scale_data) || isTRUE(config$model_scaling$rf)) X_scaled else X_raw
+  X_svm <- if (isTRUE(config$scale_data) || isTRUE(config$model_scaling$svm)) X_scaled else X_raw
+  X_xgb <- if (isTRUE(config$scale_data) || isTRUE(config$model_scaling$xgboost)) X_scaled else X_raw
+  X_knn <- if (isTRUE(config$scale_data) || isTRUE(config$model_scaling$knn)) X_scaled else X_raw
+  X_mlp <- if (isTRUE(config$scale_data) || isTRUE(config$model_scaling$mlp)) X_scaled else X_raw
   
   
   log_message(sprintf(
@@ -1202,7 +1202,7 @@ run_pipeline <- function(config) {
   annot_sample_col <- colnames(annot)[1]
   
   # Feature selection
-  feature_selection <- perform_feature_selection(data$X_scaled, data$y, config)
+  feature_selection <- perform_feature_selection(data$X_raw, data$y, config)
   X_selected_scaled <- data$X_scaled[, feature_selection$selected_features, drop = FALSE]
   X_selected_raw    <- data$X_raw[, feature_selection$selected_features, drop = FALSE]
   

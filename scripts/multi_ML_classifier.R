@@ -54,7 +54,7 @@ if (survival_available) library(survival)
 # PARAMTERS
 # =============================================================================
 
-MIN_VALID_FOLD_FRACTION <- 0.3   # at least 30% valid folds required
+MIN_VALID_FOLD_FRACTION <- 1   # never report success-conditioned partial CV
 VAR_QUANTILE <- 0.25   # remove lowest 25% variance features
 SCALE_DATA_DEFAULT <- FALSE   # data scaling before analysis
 MODEL_SCALING <- list(

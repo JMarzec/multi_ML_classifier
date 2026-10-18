@@ -6,7 +6,7 @@ load_functions <- function(path) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
         (is.call(expr[[3]]) && identical(expr[[3]][[1]], as.name("function")))) eval(expr, e)
   }
-  e$VAR_QUANTILE <- .25; e$MIN_VALID_FOLD_FRACTION <- .3
+  e$VAR_QUANTILE <- .25; e$MIN_VALID_FOLD_FRACTION <- 1
   e$survival_available <- TRUE; e$tsne_available <- FALSE; e$umap_available <- FALSE
   e
 }
@@ -43,6 +43,8 @@ for (r in 1:2) stopifnot(identical(sort(unlist(lapply(splits[vapply(splits,funct
 holdout_cfg <- cfg; holdout_cfg$train_ratio <- .7
 holdouts <- cv$make_splits(y,holdout_cfg)
 stopifnot(length(holdouts)==2L, length(holdouts[[1]]$train)==18L, length(holdouts[[1]]$test)==6L)
+partial <- list(rf=list(list(accuracy=.8)))
+stopifnot(is.null(cv$aggregate_results(partial,2L,list(rf=1L))$rf))
 actual <- factor(c(rep("0",10), rep("1",2)), levels=c("0","1"))
 pred <- factor(c(rep("0",8),rep("1",2),"0","1"), levels=c("0","1"))
 m <- cv$calculate_metrics(actual,pred)
