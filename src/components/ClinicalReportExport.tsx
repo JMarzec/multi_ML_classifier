@@ -457,7 +457,7 @@ export function ClinicalReportExport({ data }: ClinicalReportExportProps) {
 
       html += `
       <div class="footer">
-        <p>AccelBio Multi-Method ML Classifier | Analysis: ${data.metadata.config.target_variable} | R ${data.metadata.r_version}</p>
+        <p>Multi-Method ML Classifier • Powered by <a href="https://accelbio.pt/" target="_blank" rel="noopener noreferrer">AccelBio</a></p>
       </div>
     </div>
 `;

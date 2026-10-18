@@ -1,3 +1,4 @@
+import { toFiniteNumber } from "@/utils/analytics";
 import { CheckCircle2, XCircle, AlertTriangle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PermutationTesting, PermutationMetric } from "@/types/ml-results";
@@ -5,13 +6,6 @@ import type { PermutationTesting, PermutationMetric } from "@/types/ml-results";
 interface PermutationTestingPanelProps {
   permutation: PermutationTesting | null | undefined;
 }
-
-// Safe number conversion
-const toFiniteNumber = (val: unknown, fallback = 0): number => {
-  if (val === null || val === undefined) return fallback;
-  const num = typeof val === 'number' ? val : Number(val);
-  return Number.isFinite(num) ? num : fallback;
-};
 
 // Check if a metric object is valid
 const isValidMetric = (metric: unknown): metric is PermutationMetric => {
@@ -38,7 +32,7 @@ export function PermutationTestingPanel({ permutation }: PermutationTestingPanel
     metric: PermutationMetric | null | undefined,
     higherIsBetter: boolean = true
   ) => {
-    if (!isValidMetric(metric)) {
+    if (!isValidMetric(metric) || [metric.original, metric.permuted_mean, metric.permuted_sd, metric.p_value].some(v => toFiniteNumber(v) === undefined)) {
       return (
         <div className="bg-muted/50 rounded-lg p-5 border border-border">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -49,10 +43,10 @@ export function PermutationTestingPanel({ permutation }: PermutationTestingPanel
       );
     }
 
-    const original = toFiniteNumber(metric.original);
-    const permutedMean = toFiniteNumber(metric.permuted_mean);
-    const permutedSd = toFiniteNumber(metric.permuted_sd);
-    const pValue = toFiniteNumber(metric.p_value, 1);
+    const original = toFiniteNumber(metric.original) ?? NaN;
+    const permutedMean = toFiniteNumber(metric.permuted_mean) ?? NaN;
+    const permutedSd = toFiniteNumber(metric.permuted_sd) ?? NaN;
+    const pValue = toFiniteNumber(metric.p_value) ?? NaN;
 
     const isSignificant = pValue < 0.05;
     const isTrending = pValue < 0.1;
