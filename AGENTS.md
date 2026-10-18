@@ -6,3 +6,4 @@
 - Shared analytics selectors define numeric conversion, missing values and survival cohort placement; this keeps displays and exports consistent.
 - Regression tests cover scientific data rules and malformed results, not presentation snapshots; this protects consequential behavior.- Survival forest plotting is isolated from tab data preparation; this keeps rendering changes independent of statistical selectors.
 - JavaScript regression tests live outside browser source and use Bun; this avoids introducing test runtime globals into generated clients.
+- R download files in public/scripts must match the canonical scripts directory; this ensures website downloads include tested corrections.
