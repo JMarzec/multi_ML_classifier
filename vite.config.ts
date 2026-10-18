@@ -11,6 +11,11 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [react(), mode === "development" && componentTagger(), mcpPlugin()].filter(Boolean),
+  esbuild: {
+    // These browser targets support destructuring. esbuild 0.28 otherwise
+    // requests an unsupported lowering pass for older Safari compatibility.
+    supported: { destructuring: true },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
