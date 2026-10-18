@@ -12,14 +12,13 @@ describe("stateless result tools", () => {
  });
  test("zero AUROC is retained in tool summaries", async () => {
   const result = await summarize.handler({json:run}, {} as never);
-  expect(result.structuredContent?.models).toEqual([{model:"rf",auroc:0,accuracy:.75,f1:null}]);
+  expect(result.structuredContent?.models).toEqual([{model:"rf",auroc:0,accuracy:.75,f1:null,sensitivity:null,specificity:null}]);
  });
  test("validated JSON is accepted through the same entry point", async () => {
   expect((await validate.handler({json:run}, {} as never)).structuredContent?.isValid).toBe(true);
  });
  test("missing F1 is not compared as zero", async () => {
   const result = await compare.handler({json_a:run,json_b:run}, {} as never);
-  expect(result.structuredContent?.models).toBeDefined();
-  expect(JSON.stringify(result.structuredContent)).toContain('"f1_delta":null');
+  expect(result.structuredContent?.models).toEqual([{model:"rf",a:{auroc:0,accuracy:.75,f1:null},b:{auroc:0,accuracy:.75,f1:null}}]);
  });
 });
